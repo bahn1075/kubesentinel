@@ -1,0 +1,21 @@
+Starting KubeSentinel AI...
+Configuration loaded successfully (LogLevel: info, Port: 8080)
+AI Provider: openai-compatible (Endpoint: http://localhost:8080/v1)
+KubeSentinel AI is now running. Press Ctrl+C to exit.
+Starting Webhook Server on port 8080...
+[KubeSentinel] New Incident Detected: inc-20260618-KubePodCrashLooping
+  - Alert: KubePodCrashLooping, Namespace: production, Workload: api-server
+[KubeSentinel] New Incident Detected: inc-20260618-KubePodCrashLooping
+  - Alert: KubePodCrashLooping, Namespace: production, Workload: api-server
+[KubeSentinel] New Incident Detected: inc-20260618-KubePodCrashLooping
+  - Alert: KubePodCrashLooping, Namespace: production, Workload: api-server
+[KubeSentinel] New Incident Detected: inc-20260618-KubePodCrashLooping
+  - Alert: KubePodCrashLooping, Namespace: production, Workload: api-server
+[KubeSentinel] New Incident Detected: inc-20260618-KubePodCrashLooping
+  - Alert: KubePodCrashLooping, Namespace: production, Workload: api-server
+[KubeSentinel] New Incident Detected: inc-20260618-KubePodCrashLooping
+  - Alert: KubePodCrashLooping, Namespace: production, Workload: api-server
+[KubeSentinel] New Incident Detected: inc-20260618-KubePodCrashLooping
+  - Alert: KubePodCrashLooping, Namespace: production, Workload: api-server
+[KubeSentinel] New Incident Detected: inc-20260618-KubePodCrashLooping
+  - Alert: KubePodCrashLooping, Namespace: production, Workload: api-server
