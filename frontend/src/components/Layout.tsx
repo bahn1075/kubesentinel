@@ -29,8 +29,8 @@ export default function Layout({ children }: { children: ReactNode }) {
       <main className="main">
         {isMockMode && (
           <div className="banner">
-            🧪 <strong>Mock 모드</strong> — 백엔드 조회 API 연동 전입니다. 표시되는 데이터는 예시이며,
-            화면 구성은 향후 기능(RCA·제안·승인·정책)을 반영합니다.
+            🧪 <strong>일부 화면 예시 데이터</strong> — Incidents·Settings는 백엔드/DB와 연동됩니다.
+            Policies·Approvals는 아직 예시이며 향후 백엔드 API로 전환됩니다.
           </div>
         )}
         {children}

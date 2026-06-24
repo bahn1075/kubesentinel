@@ -1,33 +1,70 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ProviderSettings } from "../api/types";
-import { loadSettings, saveSettings, resetSettings } from "../api/settingsStore";
+import { fetchSettings, saveSettings, fetchAIStatus, checkAIHealth, type AIStatus, type AIHealth } from "../api/client";
 
 // AIProvider / Collector / Notifier / GitOps 설정 편집 (architecture.md §4).
-// 입력값은 localStorage에 저장되어 앱 전체(fetchSettings)에서 사용된다.
+// 비민감 설정은 백엔드 API(/api/settings → Postgres)에 저장된다.
+// 민감정보(API Key/token)는 DB가 아닌 k8s Secret/env로 관리한다.
 export default function Settings() {
-  const [s, setS] = useState<ProviderSettings>(loadSettings);
+  const [s, setS] = useState<ProviderSettings | null>(null);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
 
-  // 중첩 필드 업데이트 헬퍼
+  // 활성 제공자 정보 + health check
+  const [status, setStatus] = useState<AIStatus | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [health, setHealth] = useState<AIHealth | null>(null);
+  const [healthErr, setHealthErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchSettings().then(setS).catch((e) => setLoadErr(String(e)));
+    fetchAIStatus().then(setStatus).catch(() => setStatus(null));
+  }, []);
+
   function update<K extends keyof ProviderSettings>(section: K, patch: Partial<ProviderSettings[K]>) {
-    setS((prev) => ({ ...prev, [section]: { ...prev[section], ...patch } }));
+    setS((prev) => (prev ? { ...prev, [section]: { ...prev[section], ...patch } } : prev));
     setSaved(false);
   }
 
-  function onSave() {
-    saveSettings(s);
-    setSaved(true);
+  async function onSave() {
+    if (!s) return;
+    setSaving(true);
+    setSaveErr(null);
+    try {
+      const persisted = await saveSettings(s);
+      setS(persisted);
+      setSaved(true);
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function onReset() {
-    setS(resetSettings());
-    setSaved(false);
+  async function onCheckHealth() {
+    setChecking(true);
+    setHealth(null);
+    setHealthErr(null);
+    try {
+      setHealth(await checkAIHealth());
+    } catch (e) {
+      setHealthErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setChecking(false);
+    }
   }
+
+  if (loadErr) return <p className="test-result err">설정 로드 실패: {loadErr}</p>;
+  if (!s) return <p className="muted">로딩 중…</p>;
+
+  const kindLabel = (k?: string) => (k === "frontier" ? "프론티어" : k === "local" ? "로컬" : "알 수 없음");
 
   return (
     <>
       <h1 className="page-title">Settings</h1>
-      <p className="page-sub">플랫폼 연동 설정. 입력값은 브라우저에 저장되어 앱에서 사용됩니다 (백엔드 API 연동 시 서버로 전송).</p>
+      <p className="page-sub">플랫폼 연동 설정. 비민감 항목은 백엔드 DB에 저장됩니다 (민감정보는 k8s Secret으로 관리).</p>
 
       {/* AI Provider */}
       <div className="section">
@@ -39,12 +76,15 @@ export default function Settings() {
           </select>
 
           <label>Endpoint</label>
-          <input value={s.ai.endpoint} placeholder="http://ollama.llm.svc:11434/v1"
+          <input value={s.ai.endpoint} placeholder="http://host.minikube.internal:1234/v1"
             onChange={(e) => update("ai", { endpoint: e.target.value })} />
 
           <label>Model</label>
-          <input value={s.ai.model} placeholder="llama3 | gpt-4o-mini"
+          <input value={s.ai.model} placeholder="gemma-4-26b-a4b-it-mlx"
             onChange={(e) => update("ai", { model: e.target.value })} />
+
+          <label>API Key</label>
+          <span className="muted">k8s Secret/env로 관리 (DB 미저장)</span>
 
           <label>External 허용</label>
           <label className="chk"><input type="checkbox" checked={s.ai.allowExternal}
@@ -53,6 +93,55 @@ export default function Settings() {
           <label>Secret redact</label>
           <label className="chk"><input type="checkbox" checked={s.ai.redactSecrets}
             onChange={(e) => update("ai", { redactSecrets: e.target.checked })} /> 전송 전 시크릿 마스킹</label>
+        </div>
+
+        {/* 현재 연결됨(활성) — 백엔드가 실제로 사용 중인 제공자. 폼 저장 후 재시작 시 갱신됨 */}
+        <div className="provider-panel">
+          <div className="provider-head">
+            <strong>현재 연결됨</strong>
+            <span className="muted" style={{ fontSize: 12 }}>저장한 설정은 백엔드 재시작 시 반영</span>
+          </div>
+          {status ? (
+            <div className="kv">
+              <span className="k">제공자 종류</span>
+              <span><span className={`badge ${status.providerKind === "frontier" ? "warn" : status.providerKind === "local" ? "ok" : "dim"}`}>{kindLabel(status.providerKind)}</span></span>
+              <span className="k">제공자</span><span>{status.providerName}</span>
+              <span className="k">모델</span><span className="mono">{status.model || "—"}</span>
+              <span className="k">Endpoint</span><span className="mono">{status.endpoint || "—"}</span>
+            </div>
+          ) : (
+            <p className="muted">활성 제공자 정보를 불러올 수 없습니다.</p>
+          )}
+
+          <div className="btn-row" style={{ marginTop: 12 }}>
+            <button onClick={onCheckHealth} disabled={checking}>{checking ? "확인 중…" : "상태 확인"}</button>
+            {health && health.healthy && (
+              <span className="badge ok">정상 · {health.latencyMs}ms · 모델 {health.models.length}개{health.modelAvailable ? " · 설정 모델 사용가능 ✓" : ""}</span>
+            )}
+            {health && !health.healthy && <span className="badge crit">비정상</span>}
+          </div>
+
+          {health && !health.healthy && <div className="test-result err" style={{ marginTop: 8 }}>{health.error}</div>}
+          {healthErr && <div className="test-result err" style={{ marginTop: 8 }}>상태 확인 실패: {healthErr}</div>}
+          {health && health.healthy && !health.modelAvailable && status?.model && (
+            <div className="test-result err" style={{ marginTop: 8 }}>
+              ⚠️ 설정된 모델 <code>{status.model}</code> 이(가) 제공자 모델 목록에 없습니다.
+            </div>
+          )}
+          {health && health.healthy && health.models.length > 0 && (
+            <div className="test-result ok" style={{ marginTop: 8 }}>
+              사용 가능 모델 (클릭하면 위 Model 필드에 적용):
+              <div className="model-chips">
+                {health.models.map((m) => (
+                  <button key={m} type="button"
+                    className={`model-chip ${m === s.ai.model ? "active" : ""}`}
+                    onClick={() => update("ai", { model: m })}>
+                    {m}{m === s.ai.model ? " ✓" : ""}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -82,11 +171,8 @@ export default function Settings() {
             <option value="discord">discord</option>
             <option value="teams">teams</option>
           </select>
-          <label>Webhook</label>
-          <input value={s.notifier.webhook} placeholder="https://hooks.slack.com/services/..."
-            onChange={(e) => update("notifier", { webhook: e.target.value })} />
-          <label>상태</label>
-          <span><span className={`badge ${s.notifier.webhook ? "ok" : "dim"}`}>{s.notifier.webhook ? "설정됨" : "미설정"}</span></span>
+          <label>Webhook URL</label>
+          <span className="muted">k8s Secret으로 관리 (DB 미저장)</span>
         </div>
       </div>
 
@@ -106,13 +192,15 @@ export default function Settings() {
           <label>Base branch</label>
           <input value={s.gitops.baseBranch} placeholder="main"
             onChange={(e) => update("gitops", { baseBranch: e.target.value })} />
+          <label>Token</label>
+          <span className="muted">k8s Secret으로 관리 (DB 미저장)</span>
         </div>
       </div>
 
       <div className="btn-row" style={{ alignItems: "center" }}>
-        <button className="primary" onClick={onSave}>저장</button>
-        <button onClick={onReset}>기본값으로 초기화</button>
-        {saved && <span className="badge ok">저장되었습니다</span>}
+        <button className="primary" onClick={onSave} disabled={saving}>{saving ? "저장 중…" : "저장"}</button>
+        {saved && <span className="badge ok">저장되었습니다 (DB)</span>}
+        {saveErr && <span className="badge crit">저장 실패: {saveErr}</span>}
       </div>
     </>
   );

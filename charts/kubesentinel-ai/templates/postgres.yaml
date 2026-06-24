@@ -1,0 +1,98 @@
+{{- if .Values.postgres.enabled -}}
+# 로컬/테스트용 단일 인스턴스 Postgres. 운영에서는 postgres.enabled=false +
+# database.url로 외부 관리형 DB를 권장. (architecture.md 운영 리스크)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "kubesentinel-ai.postgres.fullname" . }}
+  labels:
+    {{- include "kubesentinel-ai.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  POSTGRES_DB: {{ .Values.postgres.database | quote }}
+  POSTGRES_USER: {{ .Values.postgres.username | quote }}
+  POSTGRES_PASSWORD: {{ .Values.postgres.password | quote }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "kubesentinel-ai.postgres.fullname" . }}
+  labels:
+    {{- include "kubesentinel-ai.labels" . | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.postgres.storage }}
+  {{- with .Values.postgres.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kubesentinel-ai.postgres.fullname" . }}
+  labels:
+    {{- include "kubesentinel-ai.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate          # RWO 볼륨 — 동시에 두 Pod가 마운트하지 않도록
+  selector:
+    matchLabels:
+      {{- include "kubesentinel-ai.postgres.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kubesentinel-ai.postgres.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: postgres
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999          # postgres 이미지의 postgres uid
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          envFrom:
+            - secretRef:
+                name: {{ include "kubesentinel-ai.postgres.fullname" . }}
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgres.username | quote }}]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "kubesentinel-ai.postgres.fullname" . }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kubesentinel-ai.postgres.fullname" . }}
+  labels:
+    {{- include "kubesentinel-ai.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "kubesentinel-ai.postgres.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+{{- end }}

@@ -32,7 +32,24 @@ services:
     expose:
       - "8080"
 
-  # KubeSentinel 백엔드 (webhook 수신 → 진단 → 알림)
+  # 설정 영속화용 Postgres
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kubesentinel
+      POSTGRES_PASSWORD: kubesentinel
+      POSTGRES_DB: kubesentinel
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kubesentinel"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # KubeSentinel 백엔드 (webhook 수신 → 진단 → 알림 + 설정 API)
   backend:
     build:
       context: .
@@ -42,19 +59,31 @@ services:
       KUBESENTINEL_AI_MODEL: mock-model
       KUBESENTINEL_AI_NOTIFIER_TYPE: slack
       KUBESENTINEL_AI_NOTIFIER_WEBHOOK: http://notify-sink:8080/
+      KUBESENTINEL_AI_DATABASE_URL: postgres://kubesentinel:kubesentinel@postgres:5432/kubesentinel?sslmode=disable
       # 선택: 실제 관측 스택이 있으면 주입 (없으면 비워두어 skip)
       # KUBESENTINEL_AI_PROMETHEUS_URL: ""
       # KUBESENTINEL_AI_LOKI_URL: ""
     ports:
       - "8080:8080"
     depends_on:
-      - mock-llm
-      - notify-sink
+      mock-llm:
+        condition: service_started
+      notify-sink:
+        condition: service_started
+      postgres:
+        condition: service_healthy
 
-  # Operator 대시보드 (mock 모드 — 백엔드 조회 API 연동 전)
+  # Operator 대시보드 (UI + /api → 백엔드 프록시)
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    environment:
+      BACKEND_URL: http://backend:8080
     ports:
       - "8081:8080"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

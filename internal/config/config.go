@@ -12,6 +12,13 @@ type Config struct {
 	Collector CollectorConfig `yaml:"collector"`
 	GitOps    GitOpsConfig    `yaml:"gitops"`
 	Notifier  NotifierConfig  `yaml:"notifier"`
+	Database  DatabaseConfig  `yaml:"database"`
+}
+
+// DatabaseConfig는 설정 영속화용 Postgres 연결 정보입니다.
+// URL이 비어 있으면 설정 저장 기능(/api/settings)이 비활성화됩니다.
+type DatabaseConfig struct {
+	URL string `yaml:"url"` // postgres://user:pass@host:5432/db?sslmode=disable
 }
 
 // CollectorConfig는 근거 수집(Signal Collector) 엔드포인트 설정입니다. (architecture.md §4.1)
@@ -105,6 +112,9 @@ func LoadConfig() (*Config, error) {
 	}
 	if val := os.Getenv("KUBESENTINEL_AI_GRAFANA_URL"); val != "" {
 		cfg.Collector.GrafanaURL = val
+	}
+	if val := os.Getenv("KUBESENTINEL_AI_DATABASE_URL"); val != "" {
+		cfg.Database.URL = val
 	}
 
 	// 검증 (Validation)

@@ -1,0 +1,26 @@
+# nginx 공식 엔트리포인트(20-envsubst-on-templates.sh)가 ${BACKEND_URL}을 치환한다.
+# BACKEND_URL 환경변수 = 백엔드 서비스 주소 (예: http://kubesentinel-...-ai:8080)
+# nginx 내부 변수($uri 등)는 env가 아니므로 치환되지 않는다.
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # 백엔드 API 프록시 (frontend와 같은 origin으로 노출 → CORS 불필요)
+    location /api/ {
+        proxy_pass ${BACKEND_URL};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    location /assets/ {
+        expires 7d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # SPA 라우팅 폴백
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

@@ -75,3 +75,23 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- define "kubesentinel-ai.frontend.imageTag" -}}
 {{- default .Chart.AppVersion .Values.frontend.image.tag -}}
 {{- end -}}
+
+{{/* ── Postgres ── */}}
+{{- define "kubesentinel-ai.postgres.fullname" -}}
+{{- printf "%s-postgres" (include "kubesentinel-ai.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/* 백엔드 selector와 겹치지 않도록 별도 selector 라벨 사용 */}}
+{{- define "kubesentinel-ai.postgres.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "kubesentinel-ai.name" . }}-postgres
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end -}}
+
+{{/* DATABASE DSN: database.url이 있으면 그것을, 없으면 in-chart postgres로 구성 */}}
+{{- define "kubesentinel-ai.databaseURL" -}}
+{{- if .Values.database.url -}}
+{{- .Values.database.url -}}
+{{- else if .Values.postgres.enabled -}}
+{{- printf "postgres://%s:%s@%s:5432/%s?sslmode=disable" .Values.postgres.username .Values.postgres.password (include "kubesentinel-ai.postgres.fullname" .) .Values.postgres.database -}}
+{{- end -}}
+{{- end -}}

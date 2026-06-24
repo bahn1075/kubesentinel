@@ -31,6 +31,10 @@ spec:
             - name: http
               containerPort: 8080   # nginx-unprivileged
               protocol: TCP
+          env:
+            # nginx가 /api/* 를 백엔드 Service로 프록시 (envsubst로 치환)
+            - name: BACKEND_URL
+              value: "http://{{ include "kubesentinel-ai.fullname" . }}:{{ .Values.service.port }}"
           {{- if .Values.probes.enabled }}
           readinessProbe:
             httpGet:
@@ -47,15 +51,18 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
-          # readOnlyRootFilesystem 유지를 위해 nginx temp/cache/run을 emptyDir로 제공
+          # readOnlyRootFilesystem 유지를 위해 nginx가 쓰는 경로를 emptyDir로 제공.
+          # conf.d: 엔트리포인트가 ${BACKEND_URL} 치환 결과(default.conf)를 여기에 생성한다.
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
             - { name: cache, mountPath: /var/cache/nginx }
             - { name: run, mountPath: /var/run }
+            - { name: confd, mountPath: /etc/nginx/conf.d }
       volumes:
         - { name: tmp, emptyDir: {} }
         - { name: cache, emptyDir: {} }
         - { name: run, emptyDir: {} }
+        - { name: confd, emptyDir: {} }
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

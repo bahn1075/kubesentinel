@@ -5,44 +5,60 @@ import (
 	"kubesentinel-ai/internal/collector"
 	"kubesentinel-ai/internal/config"
 	"kubesentinel-ai/internal/diagnosis"
+	"kubesentinel-ai/internal/models"
 	"kubesentinel-ai/internal/notifier"
 	"kubesentinel-ai/internal/provider"
+	"kubesentinel-ai/internal/store"
 	"log"
 )
 
 func main() {
 	fmt.Println("Starting KubeSentinel AI...")
 
-	// 1. Load Configuration
+	// 1. Load Configuration (env + 기본값)
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
-
 	fmt.Printf("Configuration loaded successfully (LogLevel: %s, Port: %d)\n", cfg.App.LogLevel, cfg.App.Port)
-	fmt.Printf("AI Provider: %s (Endpoint: %s)\n", cfg.AI.ProviderType, cfg.AI.Endpoint)
 
-	// 2. Initialize Components
+	// 2. Settings Store (Postgres). DATABASE_URL 미설정 시 비활성(설정 API 503).
+	var st *store.Store
+	if cfg.Database.URL != "" {
+		st, err = store.New(cfg.Database.URL)
+		if err != nil {
+			log.Fatalf("Failed to connect to database: %v", err)
+		}
+		if err := st.Migrate(); err != nil {
+			log.Fatalf("Failed to run migrations: %v", err)
+		}
+		fmt.Println("Database connected and migrations applied.")
 
-	// [A] AI Gateway 생성 (LLM 통신 엔진)
+		// 2-1. DB에 저장된 설정을 cfg에 병합한다 (비민감 항목). (implementation-status §3.6)
+		// 민감정보(API key/webhook/token)는 계속 env/Secret에서 가져온다.
+		if s, err := st.GetSettings(); err != nil {
+			log.Printf("warning: failed to load settings from DB, using env config: %v", err)
+		} else {
+			applyDBSettings(cfg, s)
+			fmt.Println("Applied settings from database (non-sensitive overrides).")
+		}
+	} else {
+		fmt.Println("DATABASE_URL not set — settings persistence disabled.")
+	}
+
+	fmt.Printf("AI Provider: %s (Endpoint: %s, Model: %s)\n", cfg.AI.ProviderType, cfg.AI.Endpoint, cfg.AI.Model)
+
+	// 3. Initialize Components (병합된 cfg 기준)
 	aiGateway := provider.NewAIGateway(&cfg.AI)
-
-	// [B] Diagnosis Engine 생성 (분석 로직 엔진)
 	engine := diagnosis.NewEngine(aiGateway)
-
-	// [C] Evidence Enricher 생성 (Prometheus/Loki 근거 보강)
 	enricher := collector.NewEnricher(cfg.Collector)
-
-	// [D] Notifier 생성 (알림 채널)
 	notify, err := notifier.New(cfg.Notifier, cfg.Collector.GrafanaURL)
 	if err != nil {
 		log.Fatalf("Failed to initialize notifier: %v", err)
 	}
 
-	// [E] Webhook Server 생성 (컴포넌트 주입)
-	server := collector.NewWebhookServer(fmt.Sprintf("%d", cfg.App.Port), engine, enricher, notify)
-
-	// 3. Start Webhook Server in a Goroutine
+	// 4. Webhook/API Server
+	server := collector.NewWebhookServer(fmt.Sprintf("%d", cfg.App.Port), engine, enricher, notify, st, cfg.AI)
 	go func() {
 		if err := server.Start(); err != nil {
 			log.Fatalf("Webhook server failed to start: %v", err)
@@ -50,7 +66,45 @@ func main() {
 	}()
 
 	fmt.Println("KubeSentinel AI is now running. Press Ctrl+C to exit.")
-
-	// 4. Keep the application running
 	select {}
+}
+
+// applyDBSettings는 DB에 저장된 비민감 설정을 cfg에 덮어쓴다(빈 문자열은 건너뜀).
+// bool 값(allowExternal/redactSecrets)은 DB를 권위 소스로 본다.
+func applyDBSettings(cfg *config.Config, s models.AppSettings) {
+	if s.AI.Type != "" {
+		cfg.AI.ProviderType = s.AI.Type
+	}
+	if s.AI.Endpoint != "" {
+		cfg.AI.Endpoint = s.AI.Endpoint
+	}
+	if s.AI.Model != "" {
+		cfg.AI.Model = s.AI.Model
+	}
+	cfg.AI.AllowExternal = s.AI.AllowExternal
+	cfg.AI.RedactSecrets = s.AI.RedactSecrets
+
+	if s.Collector.PrometheusURL != "" {
+		cfg.Collector.PrometheusURL = s.Collector.PrometheusURL
+	}
+	if s.Collector.LokiURL != "" {
+		cfg.Collector.LokiURL = s.Collector.LokiURL
+	}
+	if s.Collector.GrafanaURL != "" {
+		cfg.Collector.GrafanaURL = s.Collector.GrafanaURL
+	}
+
+	if s.Notifier.Type != "" {
+		cfg.Notifier.Type = s.Notifier.Type
+	}
+
+	if s.GitOps.Provider != "" {
+		cfg.GitOps.Provider = s.GitOps.Provider
+	}
+	if s.GitOps.Repository != "" {
+		cfg.GitOps.Repository = s.GitOps.Repository
+	}
+	if s.GitOps.BaseBranch != "" {
+		cfg.GitOps.BaseBranch = s.GitOps.BaseBranch
+	}
 }

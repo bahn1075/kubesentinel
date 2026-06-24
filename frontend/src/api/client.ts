@@ -1,6 +1,5 @@
 import type { Incident, RemediationPolicy, ProviderSettings } from "./types";
-import { mockIncidents, mockPolicies } from "./mock";
-import { loadSettings } from "./settingsStore";
+import { mockIncidents, mockPolicies, mockSettings } from "./mock";
 
 // 백엔드 API가 아직 없으므로 기본은 MOCK 모드.
 // 백엔드에 조회 API(예: GET /api/incidents)가 생기면 VITE_USE_MOCK=false 로 두고
@@ -14,14 +13,31 @@ async function getJSON<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function putJSON<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+// Incidents는 백엔드(DB)에서 조회한다. 백엔드가 없으면 mock으로 폴백(dev 편의).
 export async function fetchIncidents(): Promise<Incident[]> {
-  if (USE_MOCK) return Promise.resolve(mockIncidents);
-  return getJSON<Incident[]>("/incidents"); // TODO(backend): GET /api/incidents
+  try {
+    return await getJSON<Incident[]>("/incidents");
+  } catch {
+    return mockIncidents;
+  }
 }
 
 export async function fetchIncident(id: string): Promise<Incident | undefined> {
-  if (USE_MOCK) return Promise.resolve(mockIncidents.find((i) => i.incidentId === id));
-  return getJSON<Incident>(`/incidents/${encodeURIComponent(id)}`);
+  try {
+    return await getJSON<Incident>(`/incidents/${encodeURIComponent(id)}`);
+  } catch {
+    return mockIncidents.find((i) => i.incidentId === id);
+  }
 }
 
 export async function fetchPolicies(): Promise<RemediationPolicy[]> {
@@ -29,10 +45,18 @@ export async function fetchPolicies(): Promise<RemediationPolicy[]> {
   return getJSON<RemediationPolicy[]>("/policies");
 }
 
+// Settings는 incidents/policies와 달리 항상 백엔드(DB)와 통신한다.
+// 백엔드가 없으면(예: 순수 mock dev) 기본값으로 폴백한다.
 export async function fetchSettings(): Promise<ProviderSettings> {
-  // mock 모드: 사용자가 저장한 설정(localStorage)을 사용. 미저장이면 기본값.
-  if (USE_MOCK) return Promise.resolve(loadSettings());
-  return getJSON<ProviderSettings>("/settings");
+  try {
+    return await getJSON<ProviderSettings>("/settings");
+  } catch {
+    return mockSettings;
+  }
+}
+
+export async function saveSettings(s: ProviderSettings): Promise<ProviderSettings> {
+  return putJSON<ProviderSettings>("/settings", s);
 }
 
 // 미래 기능(MVP-2): 승인/반려 액션. 현재는 비활성(백엔드 미구현).
@@ -42,3 +66,30 @@ export async function decideApproval(_id: string, _decision: "approve" | "reject
 }
 
 export const isMockMode = USE_MOCK;
+
+// 현재 백엔드가 연결하도록 설정된(활성) AI 제공자 정보
+export interface AIStatus {
+  endpoint: string;
+  model: string;
+  providerKind: string; // local | frontier | unknown
+  providerName: string;
+}
+
+// 백엔드가 수행한 health check 결과
+export interface AIHealth {
+  healthy: boolean;
+  latencyMs: number;
+  models: string[];
+  modelAvailable: boolean;
+  error?: string;
+}
+
+// 활성 AI 제공자 정보 (백엔드 기준)
+export async function fetchAIStatus(): Promise<AIStatus> {
+  return getJSON<AIStatus>("/ai/status");
+}
+
+// 백엔드 → 활성 제공자 health check (백엔드가 host.minikube.internal 등 실제 주소로 호출)
+export async function checkAIHealth(): Promise<AIHealth> {
+  return getJSON<AIHealth>("/ai/health");
+}

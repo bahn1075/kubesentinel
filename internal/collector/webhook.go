@@ -3,9 +3,11 @@ package collector
 import (
 	"encoding/json"
 	"fmt"
+	"kubesentinel-ai/internal/config"
 	"kubesentinel-ai/internal/diagnosis"
 	"kubesentinel-ai/internal/models"
 	"kubesentinel-ai/internal/notifier"
+	"kubesentinel-ai/internal/store"
 	"net/http"
 )
 
@@ -15,15 +17,19 @@ type WebhookServer struct {
 	Engine   *diagnosis.Engine
 	Enricher *Enricher
 	Notifier notifier.Notifier
+	Store    *store.Store    // 설정 영속화 (nil이면 /api/settings 비활성)
+	AI       config.AIConfig // 현재 활성(병합된) AI 설정 — 상태/health 표시용
 }
 
 // NewWebhookServer는 새로운 WebhookServer 인스턴스를 생성합니다.
-func NewWebhookServer(port string, engine *diagnosis.Engine, enricher *Enricher, n notifier.Notifier) *WebhookServer {
+func NewWebhookServer(port string, engine *diagnosis.Engine, enricher *Enricher, n notifier.Notifier, st *store.Store, ai config.AIConfig) *WebhookServer {
 	return &WebhookServer{
 		Port:     port,
 		Engine:   engine,
 		Enricher: enricher,
 		Notifier: n,
+		Store:    st,
+		AI:       ai,
 	}
 }
 
@@ -31,6 +37,12 @@ func NewWebhookServer(port string, engine *diagnosis.Engine, enricher *Enricher,
 func (s *WebhookServer) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/alerts", s.handleAlertmanagerWebhook)
+	mux.HandleFunc("/api/settings", s.handleSettings)
+	mux.HandleFunc("/api/incidents", s.handleIncidents)
+	mux.HandleFunc("/api/incidents/", s.handleIncidentDetail)
+	mux.HandleFunc("/api/ai/status", s.handleAIStatus)
+	mux.HandleFunc("/api/ai/health", s.handleAIHealth)
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
 
 	fmt.Printf("Starting Webhook Server on port %s...\n", s.Port)
 	return http.ListenAndServe(":"+s.Port, mux)
@@ -67,19 +79,30 @@ func (s *WebhookServer) handleAlertmanagerWebhook(w http.ResponseWriter, r *http
 
 		// 2-2. AI RCA 분석
 		result, err := s.Engine.Analyze(b)
+		state := "DiagnosisCompleted"
 		if err != nil {
 			fmt.Printf("[KubeSentinel] ❌ Analysis Failed: %v\n", err)
-			return
-		}
-		fmt.Printf("[KubeSentinel] ✅ Analysis Complete!\n")
-		fmt.Printf("  - Root Cause: %s\n", result.RootCause)
-		fmt.Printf("  - Summary: %s\n", result.Summary)
-		if len(result.ProposedActions) > 0 {
-			fmt.Printf("  - Proposed Actions: %d\n", len(result.ProposedActions))
+			state = "ValidationFailed"
+			result = nil
+		} else {
+			fmt.Printf("[KubeSentinel] ✅ Analysis Complete!\n")
+			fmt.Printf("  - Root Cause: %s\n", result.RootCause)
+			fmt.Printf("  - Summary: %s\n", result.Summary)
+			if len(result.ProposedActions) > 0 {
+				fmt.Printf("  - Proposed Actions: %d\n", len(result.ProposedActions))
+			}
 		}
 
-		// 2-3. 알림 채널 전송 (MVP-0: 읽기 전용 RCA + 알림)
-		if s.Notifier != nil {
+		// 2-3. 인시던트 영속화 (DB, 대시보드 조회용)
+		if s.Store != nil {
+			view := models.NewIncidentView(b, result, state)
+			if e := s.Store.SaveIncident(view); e != nil {
+				fmt.Printf("[KubeSentinel] ⚠️  Save Incident Failed: %v\n", e)
+			}
+		}
+
+		// 2-4. 알림 채널 전송 (분석 성공 시) — MVP-0: 읽기 전용 RCA + 알림
+		if result != nil && s.Notifier != nil {
 			if err := s.Notifier.NotifyDiagnosis(b, result); err != nil {
 				fmt.Printf("[KubeSentinel] ⚠️  Notification Failed: %v\n", err)
 			}

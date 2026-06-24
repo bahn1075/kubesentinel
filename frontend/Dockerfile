@@ -22,6 +22,9 @@ RUN npm run build
 
 # --- runtime stage ---
 FROM nginxinc/nginx-unprivileged:alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# 템플릿: 엔트리포인트가 ${BACKEND_URL}을 치환해 conf.d/default.conf 생성
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=builder /app/dist /usr/share/nginx/html
+# 기본값(compose용). k8s에서는 deployment env로 백엔드 서비스 주소를 주입한다.
+ENV BACKEND_URL=http://backend:8080
 EXPOSE 8080

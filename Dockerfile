@@ -11,8 +11,8 @@ FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 
 WORKDIR /src
 
-# 의존성 매니페스트 먼저 복사 (레이어 캐시). 현재 외부 의존성은 없다.
-COPY go.mod ./
+# 의존성 매니페스트 먼저 복사 (레이어 캐시)
+COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .

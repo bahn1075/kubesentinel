@@ -40,6 +40,23 @@ gitops:
   repository: ""        # <org>/<manifest-repo>
   baseBranch: main
 
+# ── 설정 영속화 DB (Postgres) ─────────────────────────────────────
+# enabled=true면 차트가 단일 인스턴스 Postgres를 함께 배포한다(로컬/테스트용).
+# 운영에서는 enabled=false + database.url로 외부 관리형 DB를 가리키는 것을 권장.
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  database: kubesentinel
+  username: kubesentinel
+  password: kubesentinel       # 데모용. 운영은 secret.existingSecret 또는 외부 비밀로 교체
+  storage: 1Gi                 # PVC 크기
+  storageClassName: ""         # 미지정 시 클러스터 default
+
+database:
+  # 외부 DB를 쓰려면 여기에 DSN을 넣는다(설정 시 in-chart postgres 주소보다 우선).
+  # 비워두면 postgres.enabled=true일 때 in-chart 서비스로 자동 구성된다.
+  url: ""
+
 # ── 민감정보 ──────────────────────────────────────────────────────
 # secret.create=true 면 아래 값으로 Secret을 생성한다(데모/부트스트랩용).
 # 운영에서는 existingSecret으로 외부에서 관리되는 Secret(SealedSecret/ESO 등)을 참조하라.
@@ -57,6 +74,7 @@ service:
 
 # ── Frontend (operator dashboard) ─────────────────────────────────
 # 별도 이미지(frontend/Dockerfile)로 빌드되며, 이 차트에 함께 배포된다.
+# nginx가 /api/* 를 백엔드 Service로 프록시한다(같은 origin → CORS 불필요).
 frontend:
   enabled: true
   replicaCount: 1

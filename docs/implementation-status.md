@@ -30,7 +30,10 @@
 | Helm chart / Dockerfile | — | ❌ 미구현 | architecture §12 |
 | 테스트 | `*_test.go` | ✅ 부분 | models / provider / notifier 단위 테스트 존재. collector·engine 미커버 |
 | Dockerfile / Helm / ArgoCD | `Dockerfile`, `charts/`, `deploy/argocd/` | ✅ 동작 | multi-arch 이미지 + Helm 차트 + ArgoCD Application. `helm lint`·`docker build` 검증됨 |
-| Frontend (dashboard) | `frontend/` | ✅ 동작 (mock) | React+Vite+TS. **백엔드 조회 API 미존재 → mock 모드**. Helm `frontend.enabled`로 함께 배포. `npm run build` 검증됨 |
+| Frontend (dashboard) | `frontend/` | ✅ 동작 | React+Vite+TS. **Settings·Incidents 백엔드 API(DB) 연동**, policies/approvals는 아직 mock. nginx가 `/api`→백엔드 프록시. Helm `frontend.enabled` |
+| 설정 영속화 (Settings) | `internal/store`, `/api/settings` | ✅ 동작 | Postgres + goose 임베드 마이그레이션(v2). 비민감 설정만 저장(민감정보는 Secret/env). 기동 시 cfg에 병합되어 파이프라인이 소비(§3.6). 재시작·Pod 재생성 후 영속 검증됨 |
+| 인시던트 영속화 (Incidents) | `internal/store`, `/api/incidents` | ✅ 동작 | webhook 처리 시 `incidents` 테이블 저장 → `GET /api/incidents[/{id}]`로 대시보드 조회. camelCase 뷰가 프론트 타입과 정합 |
+| Postgres | `charts/.../postgres.yaml`, compose | ✅ 동작 | 차트 `postgres.enabled`(로컬/테스트) 또는 `database.url`(외부 DB). PVC 영속 |
 
 범례: ✅ 동작 · [~]/부분 · ❌ 미구현
 
@@ -124,6 +127,7 @@ notifier.NotifyDiagnosis(bundle, result)  # Discord/Slack/Teams
 | `KUBESENTINEL_AI_NOTIFIER_TYPE` | Notifier.Type | `slack`로 해석 | `discord`/`slack`/`teams` |
 | `KUBESENTINEL_AI_NOTIFIER_WEBHOOK` | Notifier.Webhook | — | 미설정 시 noop(알림 안 감) |
 | `KUBESENTINEL_AI_GIT_TOKEN` | GitOps.Token | — | MVP-1부터 |
+| `KUBESENTINEL_AI_DATABASE_URL` | Database.URL | — | 설정 영속화용 Postgres DSN. 미설정 시 `/api/settings` 503 |
 
 > `Validate()`는 현재 `ai.provider_type`와 openai-compatible의 `endpoint`만 검사한다.
 > Port·LogLevel은 코드 기본값(8080/info)이며 env 노출 안 됨 → 필요 시 추가.
@@ -215,7 +219,9 @@ kubectl apply -n argocd -f deploy/argocd/application.yaml
 3. **redactSecrets / maxInputTokens 적용** — provider에서 evidence 전송 전 시크릿 마스킹·토큰 절단(현재 config 값만 있고 미사용).
 
 ### Frontend 연동 (대시보드를 mock에서 실데이터로)
-3.5. **백엔드 조회 API** — 현재 frontend는 mock 모드다. `GET /api/incidents`, `/api/incidents/:id`, `/api/policies`, `/api/settings`를 백엔드에 추가하고(인시던트 상태 저장 필요 → ConfigMap/내장 DB, architecture §6 Phase A), frontend는 `VITE_USE_MOCK=false`로 전환. 응답 스키마는 `frontend/src/api/types.ts`와 정합시킨다.
+3.5. **백엔드 조회 API** — ✅ Settings + Incidents 완료. `GET/PUT /api/settings`, `GET /api/incidents`, `GET /api/incidents/{id}` (모두 Postgres). 인시던트는 webhook 처리 시 `incidents` 테이블에 영속화(state=DiagnosisCompleted/ValidationFailed). 남은 것: `/api/policies`(정책 관리 미구현 → 아직 mock), Approvals(MVP-2).
+3.6. **DB 설정을 파이프라인이 소비** — ✅ 기동 시 `store.GetSettings()`를 cfg에 병합(`applyDBSettings`) 후 컴포넌트 구성. UI에서 저장한 AI endpoint/model·collector·notifier가 실제 수집·진단·알림에 반영됨. 민감정보(키/토큰/webhook)는 계속 Secret/env.
+  - ⚠️ **설정 변경은 백엔드 재시작 시 반영**(기동 시 1회 병합). 런타임 hot-reload(인시던트마다 DB 조회 또는 watch)는 후속 과제.
 
 ### 견고성 (MVP-0와 병행 권장)
 4. **동시성 제한 + 중복 억제** — webhook goroutine에 worker pool + incident 키별 cooldown(architecture §9 `cooldownSeconds`). 현재 무제한 goroutine.

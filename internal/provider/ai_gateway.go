@@ -25,15 +25,19 @@ func NewAIGateway(cfg *config.AIConfig) *AIGateway {
 	return &AIGateway{
 		cfg: cfg,
 		client: &http.Client{
-			Timeout: 30 * time.Second,
+			// 로컬 모델(LM Studio/Ollama 등)은 추론이 느릴 수 있어 넉넉히 둔다.
+			Timeout: 90 * time.Second,
 		},
 	}
 }
 
 // ChatRequest는 LLM에 보낼 요청 구조체입니다. (OpenAI 호환 스펙)
+// response_format은 백엔드마다 지원이 달라(예: LM Studio는 json_object 거부) 사용하지 않고,
+// 프롬프트의 스키마 강제 + 관대한 파싱(diagnosis.parseJSONResponse)으로 대응한다.
 type ChatRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
+	Model       string    `json:"model"`
+	Messages    []Message `json:"messages"`
+	Temperature float64   `json:"temperature"`
 }
 
 type Message struct {
@@ -47,9 +51,10 @@ func (g *AIGateway) Chat(prompt string, context string) (*models.ChatResponse, e
 	fullPrompt := fmt.Sprintf("Context:\n%s\n\nQuestion: %s", context, prompt)
 
 	reqBody := ChatRequest{
-		Model: g.cfg.Model,
+		Model:       g.cfg.Model,
+		Temperature: 0.1, // 결정성 ↑ (architecture.md §4.2)
 		Messages: []Message{
-			{Role: "system", Content: "You are KubeSentinel AI, a Kubernetes expert. Provide structured analysis in JSON format if possible."},
+			{Role: "system", Content: "You are KubeSentinel AI, a Kubernetes expert. Respond with valid JSON only."},
 			{Role: "user", Content: fullPrompt},
 		},
 	}
