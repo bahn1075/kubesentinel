@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kubesentinel-ai.fullname" . }}
+  labels:
+    {{- include "kubesentinel-ai.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "kubesentinel-ai.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kubesentinel-ai.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
+      annotations:
+        {{- with .Values.podAnnotations }}{{ toYaml . | nindent 8 }}{{- end }}
+    spec:
+      serviceAccountName: {{ include "kubesentinel-ai.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: kubesentinel-ai
+          image: "{{ .Values.image.repository }}:{{ include "kubesentinel-ai.imageTag" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          env:
+            # ── 현재 config.LoadConfig가 읽는 env (architecture.md §2: 값 주입) ──
+            - name: KUBESENTINEL_AI_ENDPOINT
+              value: {{ .Values.ai.endpoint | quote }}
+            - name: KUBESENTINEL_AI_MODEL
+              value: {{ .Values.ai.model | quote }}
+            - name: KUBESENTINEL_AI_PROMETHEUS_URL
+              value: {{ .Values.collector.prometheusUrl | quote }}
+            - name: KUBESENTINEL_AI_LOKI_URL
+              value: {{ .Values.collector.lokiUrl | quote }}
+            - name: KUBESENTINEL_AI_GRAFANA_URL
+              value: {{ .Values.collector.grafanaUrl | quote }}
+            - name: KUBESENTINEL_AI_NOTIFIER_TYPE
+              value: {{ .Values.notifier.type | quote }}
+            # ── 민감정보: Secret 참조 (키 없으면 optional로 무시) ──
+            - name: KUBESENTINEL_AI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "kubesentinel-ai.secretName" . }}
+                  key: aiApiKey
+                  optional: true
+            - name: KUBESENTINEL_AI_NOTIFIER_WEBHOOK
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "kubesentinel-ai.secretName" . }}
+                  key: notifierWebhook
+                  optional: true
+            - name: KUBESENTINEL_AI_GIT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "kubesentinel-ai.secretName" . }}
+                  key: gitToken
+                  optional: true
+            # NOTE: ai.allowExternal / ai.redactSecrets / ai.providerType / gitops.* /
+            # collector.logLines / logLevel 은 아직 config가 env로 읽지 않는다.
+            # config 파일 로딩 또는 추가 env 매핑은 implementation-status.md §6 백로그(#3 등) 참조.
+          {{- if .Values.probes.enabled }}
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

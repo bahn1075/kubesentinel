@@ -1,0 +1,130 @@
+# KubeSentinel AI — Helm values
+# 설계 원칙(architecture.md §2): 모든 서비스 주소·repo·모델명은 코드가 아닌 여기(values)로 주입한다.
+# 동일 이미지가 kind/on-prem/EKS/GKE 어디서든 값만 바꿔 동작해야 한다.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/your-org/kubesentinel-ai
+  # tag 미지정 시 Chart.appVersion 사용
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# ── AI Gateway (architecture.md §4.2) ─────────────────────────────
+ai:
+  providerType: openai-compatible
+  endpoint: ""          # 예: http://ollama.llm.svc:11434/v1  | https://api.openai.com/v1
+  model: ""             # 예: llama3 | gpt-4o-mini
+  allowExternal: false  # 외부 모델 전송 허용 (사내 규정에 따라)
+  redactSecrets: true
+
+# ── Signal Collector 엔드포인트 (architecture.md §4.1) ────────────
+collector:
+  prometheusUrl: ""     # 예: http://prometheus-operated.monitoring.svc:9090
+  lokiUrl: ""           # 예: http://loki-gateway.monitoring.svc:80
+  grafanaUrl: ""        # 알림 딥링크용(선택)
+  logLines: 50
+
+# ── Notifier (architecture.md §4.7) ───────────────────────────────
+notifier:
+  type: slack           # discord | slack | teams
+
+# ── GitOps (architecture.md §4.5) — MVP-1부터 사용 ────────────────
+gitops:
+  provider: github      # github | gitlab | bitbucket
+  repository: ""        # <org>/<manifest-repo>
+  baseBranch: main
+
+# ── 민감정보 ──────────────────────────────────────────────────────
+# secret.create=true 면 아래 값으로 Secret을 생성한다(데모/부트스트랩용).
+# 운영에서는 existingSecret으로 외부에서 관리되는 Secret(SealedSecret/ESO 등)을 참조하라.
+secret:
+  create: true
+  existingSecret: ""    # 지정 시 create 무시하고 이 Secret을 참조
+  # 아래 키들은 비워두면 해당 env가 주입되지 않는다(optional).
+  aiApiKey: ""          # → KUBESENTINEL_AI_API_KEY
+  notifierWebhook: ""   # → KUBESENTINEL_AI_NOTIFIER_WEBHOOK
+  gitToken: ""          # → KUBESENTINEL_AI_GIT_TOKEN (MVP-1)
+
+service:
+  type: ClusterIP
+  port: 8080            # 앱 리슨 포트(config 기본값과 일치). Alertmanager가 /v1/alerts로 POST
+
+# ── Frontend (operator dashboard) ─────────────────────────────────
+# 별도 이미지(frontend/Dockerfile)로 빌드되며, 이 차트에 함께 배포된다.
+frontend:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/your-org/kubesentinel-ai-frontend
+    tag: ""             # 미지정 시 Chart.appVersion
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80            # → 컨테이너 8080(nginx-unprivileged)
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# ── Ingress (UI 노출 + /api → 백엔드 라우팅) ──────────────────────
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: kubesentinel.example.com
+  tls: []               # [{ secretName: ..., hosts: [...] }]
+  # path 라우팅: "/" → frontend, "/api" → backend(향후 조회 API)
+  apiPathPrefix: /api
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# 관측 스택에 대한 read-only RBAC (architecture.md §11.1).
+# 향후 Kubernetes Events/manifest 수집(client-go)에 사용. secret 읽기는 의도적으로 제외(R8/안전 가드).
+rbac:
+  create: true
+
+# Pod/컨테이너 보안 컨텍스트 (distroless nonroot 기준)
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+# 헬스 프로브: 앱에 아직 /healthz 엔드포인트가 없어 TCP 소켓 프로브를 사용한다.
+# /healthz 구현(백로그 #6) 후 httpGet으로 전환 권장.
+probes:
+  enabled: true
+
+logLevel: info
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}
+podLabels: {}

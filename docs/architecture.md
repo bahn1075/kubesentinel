@@ -255,11 +255,15 @@ IncidentDetected → EvidenceCollected → DiagnosisCompleted → PlanGenerated
 ## 7. MVP 로드맵
 
 ### MVP-0 — Read-only RCA + 알림 (write 전혀 없음) ⭐ 착수 지점
-- [ ] Alertmanager에 `kubesentinel` webhook receiver 추가
-- [ ] 수신 서비스: alert 파싱 → Prom/Loki/event 수집 → EvidenceBundle 생성
-- [ ] AI Gateway: OpenAI 호환 LLM으로 RCA (structured JSON)
-- [ ] 알림 채널로 진단 결과 + 근거 + 딥링크 전송
+- [ ] Alertmanager에 `kubesentinel` webhook receiver 추가 *(배포 작업, 코드 외)*
+- [~] 수신 서비스: alert 파싱 → Prom/Loki/event 수집 → EvidenceBundle 생성
+  *(alert 파싱·Prom·Loki 구현됨 / Kubernetes Events·manifest 스냅샷은 미구현 — client-go 필요)*
+- [x] AI Gateway: OpenAI 호환 LLM으로 RCA (structured JSON)
+- [x] 알림 채널로 진단 결과 + 근거 + 딥링크 전송
 - **가치/위험 비 최고. 클러스터에 쓰기 행위 0.**
+
+> **구현 현황·연속 작업 지침은 [`implementation-status.md`](implementation-status.md) 참조.**
+> 이 문서(architecture.md)는 *목표 설계*이고, implementation-status.md는 *현재 코드의 실제 상태*다.
 
 ### MVP-1 — GitOps PR 생성
 - [ ] 매니페스트 repo write 토큰(단일 repo 스코프) 설정

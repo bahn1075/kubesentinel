@@ -1,0 +1,84 @@
+package models
+
+import (
+	"fmt"
+	"time"
+)
+
+// EvidenceBundle은 한 incident에 대해 수집한 모든 근거를 담는 구조체입니다.
+// (architecture.md §4.1 JSON 스키마)
+type EvidenceBundle struct {
+	IncidentID   string                   `json:"incident_id"`
+	Source       string                   `json:"source"`
+	Alert        string                   `json:"alert"`
+	Namespace    string                   `json:"namespace"`
+	Workload     string                   `json:"workload"`
+	Pod          string                   `json:"pod"`
+	Severity     string                   `json:"severity,omitempty"`
+	Annotations  map[string]string        `json:"annotations,omitempty"`
+	Metrics      []map[string]interface{} `json:"metrics"`
+	Logs         []string                 `json:"logs"`
+	Events       []string                 `json:"events"`
+	ResourceYAML map[string]interface{}   `json:"resource_yaml"`
+	GitContext   GitContext               `json:"git_context"`
+}
+
+// GitContext는 대상 워크로드의 git 매니페스트 컨텍스트입니다.
+type GitContext struct {
+	Repo       string `json:"repo"`
+	Path       string `json:"path"`
+	LastCommit string `json:"last_commit"`
+}
+
+// NewEvidenceBundle은 Alertmanager 페이로드의 첫 alert를 기반으로
+// 최소 EvidenceBundle을 생성합니다. (Prom/Loki/Event 보강은 Collector 후속 단계)
+// alert가 하나도 없으면 nil을 반환합니다.
+func NewEvidenceBundle(payload AlertmanagerPayload) *EvidenceBundle {
+	if len(payload.Alerts) == 0 {
+		return nil
+	}
+	alert := payload.Alerts[0]
+
+	alertName := alert.Labels["alertname"]
+	namespace := alert.Labels["namespace"]
+	pod := alert.Labels["pod"]
+	severity := alert.Labels["severity"]
+
+	// 워크로드 추정: deployment/statefulset/job 라벨 우선, 없으면 pod 사용
+	workload := firstNonEmpty(
+		alert.Labels["deployment"],
+		alert.Labels["workload"],
+		alert.Labels["statefulset"],
+		alert.Labels["job"],
+		pod,
+	)
+
+	source := payload.Receiver
+	if source == "" {
+		source = "alertmanager"
+	}
+
+	return &EvidenceBundle{
+		IncidentID:   fmt.Sprintf("inc-%s-%s", time.Now().Format("20060102"), alertName),
+		Source:       source,
+		Alert:        alertName,
+		Namespace:    namespace,
+		Workload:     workload,
+		Pod:          pod,
+		Severity:     severity,
+		Annotations:  alert.Annotations,
+		Metrics:      []map[string]interface{}{},
+		Logs:         []string{},
+		Events:       []string{},
+		ResourceYAML: map[string]interface{}{},
+	}
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}

@@ -1,0 +1,35 @@
+KubeSentinel AI ({{ include "kubesentinel-ai.fullname" . }}) 가 배포되었습니다.
+
+In-cluster 서비스 주소 (Alertmanager webhook receiver가 POST할 대상):
+
+  http://{{ include "kubesentinel-ai.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}/v1/alerts
+
+다음 배선을 확인하세요 (architecture.md §2.1 Bootstrap):
+
+  1. Alertmanager receiver 추가 → 위 URL (send_resolved: true)
+  2. AI endpoint/model:        ai.endpoint={{ .Values.ai.endpoint | default "<미설정>" }} / ai.model={{ .Values.ai.model | default "<미설정>" }}
+  3. Prometheus / Loki:        {{ .Values.collector.prometheusUrl | default "<미설정>" }} / {{ .Values.collector.lokiUrl | default "<미설정>" }}
+  4. Notifier:                 type={{ .Values.notifier.type }} {{ if .Values.secret.notifierWebhook }}(webhook 설정됨){{ else }}(webhook 미설정 → 알림 비활성/noop){{ end }}
+
+{{- if not .Values.ai.endpoint }}
+
+⚠️  ai.endpoint 가 비어 있습니다. openai-compatible provider는 endpoint가 필수이며,
+    미설정 시 Pod가 config 검증 실패로 기동되지 않습니다 (config.Validate).
+{{- end }}
+
+스모크 테스트:
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "kubesentinel-ai.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+  curl -X POST localhost:{{ .Values.service.port }}/v1/alerts -H 'Content-Type: application/json' \
+    -d '{"receiver":"kubesentinel","status":"firing","alerts":[{"status":"firing","labels":{"alertname":"KubePodCrashLooping","namespace":"production","pod":"demo-1","severity":"critical"}}]}'
+
+{{- if .Values.frontend.enabled }}
+
+대시보드(UI):
+{{- if .Values.ingress.enabled }}
+  http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.host }}/   (Ingress, /api → 백엔드)
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "kubesentinel-ai.frontend.fullname" . }} 8080:{{ .Values.frontend.service.port }}
+  # 브라우저: http://localhost:8080  (현재 mock 모드 — 백엔드 조회 API 연동 전)
+{{- end }}
+{{- end }}

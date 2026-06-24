@@ -6,22 +6,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"kubesentinel-ai/internal/config"
+	"kubesentinel-ai/internal/models"
 )
 
-// AIClient는 LLM과 통신하는 인터페이스입니다.
-type AIClient interface {
-	Chat(prompt string, context string) (*ChatResponse, error)
-}
-
-// ChatResponse는 AI의 응답을 담는 구조체입니다.
-type ChatResponse struct {
-	Content string `json:"content"` // AI의 텍ext 응답
-}
-
-// AIGateway는 설정된 정보를 바탕로 AI 모델과 통신을 관리합니다.
+// AIGateway는 설정된 정보를 바탕으로 AI 모델과 통신을 관리합니다.
+// models.AIClient 인터페이스를 구현합니다.
 type AIGateway struct {
 	cfg    *config.AIConfig
 	client *http.Client
@@ -48,8 +41,8 @@ type Message struct {
 	Content string `json:"content"`
 }
 
-// Chat은 AI에게 프롬프트를 전달하고 응답을 받아옵s니다.
-func (g *AIGateway) Chat(prompt string, context string) (*ChatResponse, error) {
+// Chat은 AI에게 프롬프트를 전달하고 응답을 받아옵니다.
+func (g *AIGateway) Chat(prompt string, context string) (*models.ChatResponse, error) {
 	// 1. 프롬프트 엔지니어링: 컨텍스트와 질문을 결합
 	fullPrompt := fmt.Sprintf("Context:\n%s\n\nQuestion: %s", context, prompt)
 
@@ -67,15 +60,9 @@ func (g *AIGateway) Chat(prompt string, context string) (*ChatResponse, error) {
 	}
 
 	// 2. API 호출 (OpenAI 호환 엔드포인트로 요청)
-	// Endpoint가 /v1으로 끝나지 않을 경우를 대비해 경로를 조정할 수 있습니다.
-	endpoint := g.cfg.Endpoint
-	if endpoint != "" && endpoint[len(endpoint)-1] != '/' {
-		// 이미 경로가 포함되어 있을 수 있으므로 체크 (예: http://localhost:11434/v1)
-		if !contains(endpoint, "chat/completions") {
-			endpoint = endpoint + "/chat/completions"
-		}
-	}
-	if !contains(endpoint, "chat/completions") {
+	// base endpoint(예: http://localhost:11434/v1)에 chat/completions 경로를 보정한다.
+	endpoint := strings.TrimRight(g.cfg.Endpoint, "/")
+	if !strings.HasSuffix(endpoint, "/chat/completions") {
 		endpoint = endpoint + "/chat/completions"
 	}
 
@@ -114,12 +101,7 @@ func (g *AIGateway) Chat(prompt string, context string) (*ChatResponse, error) {
 		return nil, fmt.Errorf("empty choices in AI response")
 	}
 
-	return &ChatResponse{
+	return &models.ChatResponse{
 		Content: apiResp.Choices[0].Message.Content,
 	}, nil
-}
-
-// helper function to check if string contains substring
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && s[len(s)-len(substr):] == substr
 }

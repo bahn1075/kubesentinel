@@ -3,22 +3,27 @@ package collector
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"kubentinel-ai/internal/diagnosis"
+	"kubesentinel-ai/internal/diagnosis"
 	"kubesentinel-ai/internal/models"
+	"kubesentinel-ai/internal/notifier"
+	"net/http"
 )
 
 // WebhookServer는 HTTP 요청을 수신하는 서버입니다.
 type WebhookServer struct {
-	Port   string
-	Engine *diagnosis.Engine
+	Port     string
+	Engine   *diagnosis.Engine
+	Enricher *Enricher
+	Notifier notifier.Notifier
 }
 
 // NewWebhookServer는 새로운 WebhookServer 인스턴스를 생성합니다.
-func NewWebhookServer(port string, engine *diagnosis.Engine) *WebhookServer {
+func NewWebhookServer(port string, engine *diagnosis.Engine, enricher *Enricher, n notifier.Notifier) *WebhookServer {
 	return &WebhookServer{
-		Port:   port,
-		Engine: engine,
+		Port:     port,
+		Engine:   engine,
+		Enricher: enricher,
+		Notifier: n,
 	}
 }
 
@@ -51,20 +56,32 @@ func (s *WebhookServer) handleAlertmanagerWebhook(w http.ResponseWriter, r *http
 		return
 	}
 
-	// 2. AI 분석 엔진 호출 (비동기 실행)
+	// 2. 근거 보강 → AI 분석 → 알림 (비동기 실행)
 	go func(b *models.EvidenceBundle) {
 		fmt.Printf("\n[KubeSentinel] 🔍 Analyzing Incident: %s\n", b.IncidentID)
+
+		// 2-1. Prometheus/Loki로 EvidenceBundle 보강 (best-effort)
+		if s.Enricher != nil {
+			s.Enricher.Enrich(b)
+		}
+
+		// 2-2. AI RCA 분석
 		result, err := s.Engine.Analyze(b)
 		if err != nil {
 			fmt.Printf("[KubeSentinel] ❌ Analysis Failed: %v\n", err)
 			return
 		}
 		fmt.Printf("[KubeSentinel] ✅ Analysis Complete!\n")
-		if result != nil {
-			fmt.Printf("  - Root Cause: %s\n", result.RootCause)
-			fmt.Printf("  - Summary: %s\n", result.Summary)
-			if len(result.ProposedActions) > 0 {
-				fmt.Printf("  - Proposed Actions: %d\n", len(result.ProposedActions))
+		fmt.Printf("  - Root Cause: %s\n", result.RootCause)
+		fmt.Printf("  - Summary: %s\n", result.Summary)
+		if len(result.ProposedActions) > 0 {
+			fmt.Printf("  - Proposed Actions: %d\n", len(result.ProposedActions))
+		}
+
+		// 2-3. 알림 채널 전송 (MVP-0: 읽기 전용 RCA + 알림)
+		if s.Notifier != nil {
+			if err := s.Notifier.NotifyDiagnosis(b, result); err != nil {
+				fmt.Printf("[KubeSentinel] ⚠️  Notification Failed: %v\n", err)
 			}
 		}
 	}(bundle)

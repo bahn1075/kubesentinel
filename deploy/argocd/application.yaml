@@ -1,0 +1,49 @@
+# ArgoCD Application — KubeSentinel AI를 GitOps로 배포/관리.
+# repoURL / targetRevision 을 실제 매니페스트 repo에 맞게 수정하라.
+#
+# 적용:  kubectl apply -n argocd -f deploy/argocd/application.yaml
+# (app-of-apps 패턴이면 루트 app의 source 디렉토리에 이 파일을 둔다.)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubesentinel-ai
+  namespace: argocd
+  # 삭제 시 하위 리소스까지 정리
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/your-org/kubesentinel-ai.git
+    targetRevision: main
+    path: charts/kubesentinel-ai
+    helm:
+      # 환경별 값은 별도 values 파일로 분리 관리 권장.
+      # 예) deploy/argocd/values/prod.yaml 를 repo에 두고 valueFiles로 참조.
+      valueFiles:
+        - values.yaml
+      # 민감하지 않은 환경 오버라이드는 여기에 인라인으로도 가능:
+      valuesObject:
+        ai:
+          endpoint: ""          # 예: http://ollama.llm.svc:11434/v1
+          model: ""
+        collector:
+          prometheusUrl: ""      # 예: http://prometheus-operated.monitoring.svc:9090
+          lokiUrl: ""            # 예: http://loki-gateway.monitoring.svc:80
+        notifier:
+          type: slack
+        # 민감정보(aiApiKey/notifierWebhook/gitToken)는 여기 넣지 말 것.
+        # secret.existingSecret 로 SealedSecrets/External Secrets 가 만든 Secret을 참조하라.
+        secret:
+          create: false
+          existingSecret: kubesentinel-ai-secrets
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kubesentinel
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

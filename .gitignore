@@ -1,0 +1,17 @@
+# Compiled binary (built from cmd/kubesentinel-ai)
+/kubesentinel-ai
+
+# Runtime logs
+*.log
+
+# Go build/test artifacts
+*.test
+*.out
+
+# Local env / secrets (never commit AI keys, git tokens, webhook URLs)
+.env
+*.local.yaml
+
+# Editor / tool artifacts
+.continue/
+.DS_Store

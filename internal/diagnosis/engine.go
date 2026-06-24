@@ -3,8 +3,8 @@ package diagnosis
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"kubesentinel-ai/internal/models"
+	"strings"
 )
 
 // Engine은 AI를 사용하여 장애를 분석하는 핵심 엔진입니다.
@@ -19,12 +19,12 @@ func NewEngine(client models.AIClient) *Engine {
 	}
 }
 
-// Analyze는 EvidenceBundle을 기반로 AI 분석을 수행하고 결과를 반환합니다.
+// Analyze는 EvidenceBundle을 기반으로 AI 분석을 수행하고 결과를 반환합니다.
 func (e *Engine) Analyze(bundle *models.EvidenceBundle) (*models.DiagnosisResult, error) {
 	// 1. 프롬프트 생성 (Context + Question)
 	prompt := "Analyze the following Kubernetes incident and provides a structured response in JSON format. " +
 		"The JSON must contain 'root_cause', 'summary', and 'proposed_actions' (list of objects with 'type', 'description', 'target', 'risk')."
-	
+
 	contextBytes, err := json.MarshalIndent(bundle, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal evidence: %w", err)
@@ -49,7 +49,7 @@ func (e *Engine) Analyze(bundle *models.EvidenceBundle) (*models.DiagnosisResult
 	return result, nil
 }
 
-// parseJSONResponse는 AI의 텍-스트 응답에서 JSON 부분만 찾아 구조체로 변환합니다.
+// parseJSONResponse는 AI의 텍스트 응답에서 JSON 부분만 찾아 구조체로 변환합니다.
 func (e *Engine) parseJSONResponse(content string) (*models.DiagnosisResult, error) {
 	jsonStart := strings.Index(content, "{")
 	jsonEnd := strings.LastIndex(content, "}")
@@ -67,4 +67,3 @@ func (e *Engine) parseJSONResponse(content string) (*models.DiagnosisResult, err
 
 	return &result, nil
 }
-

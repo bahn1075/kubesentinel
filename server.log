@@ -19,3 +19,7 @@ Starting Webhook Server on port 8080...
   - Alert: KubePodCrashLooping, Namespace: production, Workload: api-server
 [KubeSentinel] New Incident Detected: inc-20260618-KubePodCrashLooping
   - Alert: KubePodCrashLooping, Namespace: production, Workload: api-server
+[KubeSentinel] New Incident Detected: inc-20260623-OOMKilled
+  - Alert: OOMKilled, Namespace: production, Workload: 
+[KubeSentinel] New Incident Detected: inc-20260623-OOMKilled
+  - Alert: OOMKilled, Namespace: production, Workload: 

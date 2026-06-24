@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"kubesentinel-ai/internal/collector"
 	"kubesentinel-ai/internal/config"
 	"kubesentinel-ai/internal/diagnosis"
+	"kubesentinel-ai/internal/notifier"
 	"kubesentinel-ai/internal/provider"
+	"log"
 )
 
 func main() {
@@ -22,15 +23,24 @@ func main() {
 	fmt.Printf("AI Provider: %s (Endpoint: %s)\n", cfg.AI.ProviderType, cfg.AI.Endpoint)
 
 	// 2. Initialize Components
-	
+
 	// [A] AI Gateway 생성 (LLM 통신 엔진)
 	aiGateway := provider.NewAIGateway(&cfg.AI)
 
 	// [B] Diagnosis Engine 생성 (분석 로직 엔진)
 	engine := diagnosis.NewEngine(aiGateway)
 
-	// [C] Webhook Server 생성 (엔진을 주입하여 인수 불일치 해결)
-	server := collector.NewWebhookServer(fmt.Sprintf("%d", cfg.App.Port), engine)
+	// [C] Evidence Enricher 생성 (Prometheus/Loki 근거 보강)
+	enricher := collector.NewEnricher(cfg.Collector)
+
+	// [D] Notifier 생성 (알림 채널)
+	notify, err := notifier.New(cfg.Notifier, cfg.Collector.GrafanaURL)
+	if err != nil {
+		log.Fatalf("Failed to initialize notifier: %v", err)
+	}
+
+	// [E] Webhook Server 생성 (컴포넌트 주입)
+	server := collector.NewWebhookServer(fmt.Sprintf("%d", cfg.App.Port), engine, enricher, notify)
 
 	// 3. Start Webhook Server in a Goroutine
 	go func() {

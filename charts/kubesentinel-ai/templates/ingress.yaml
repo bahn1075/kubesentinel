@@ -1,0 +1,45 @@
+{{- if .Values.ingress.enabled -}}
+{{- $fe := include "kubesentinel-ai.frontend.fullname" . -}}
+{{- $be := include "kubesentinel-ai.fullname" . -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "kubesentinel-ai.fullname" . }}
+  labels:
+    {{- include "kubesentinel-ai.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          # /api → 백엔드 (향후 조회 API). 백엔드 webhook(/v1/alerts)은 Alertmanager가
+          # in-cluster Service로 직접 호출하므로 Ingress 노출 대상이 아니다.
+          - path: {{ .Values.ingress.apiPathPrefix }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $be }}
+                port:
+                  number: {{ .Values.service.port }}
+          {{- if .Values.frontend.enabled }}
+          # 그 외 모든 경로 → frontend (SPA)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fe }}
+                port:
+                  number: {{ .Values.frontend.service.port }}
+          {{- end }}
+{{- end }}

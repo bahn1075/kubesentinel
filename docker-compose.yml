@@ -1,0 +1,60 @@
+# 로컬 통합 테스트 — alert → 수집 → RCA(mock LLM) → 알림(sink) 전체 흐름.
+#
+#   docker compose up --build
+#
+# 1) 알림 흐름 트리거 (다른 터미널에서):
+#      curl -X POST localhost:8080/v1/alerts \
+#        -H 'Content-Type: application/json' \
+#        --data @deploy/local/sample-alert.json
+# 2) 진단 결과 로그:   docker compose logs -f backend
+# 3) 전송된 알림 확인: docker compose logs -f notify-sink
+# 4) 대시보드(UI, mock 모드): http://localhost:8081
+#
+# 참고: Prometheus/Loki는 best-effort라 미설정 시 자동 skip 된다. 실제 LLM을 쓰려면
+# backend의 KUBESENTINEL_AI_ENDPOINT/MODEL 을 해당 엔드포인트로 바꾸면 된다.
+
+services:
+  # OpenAI 호환 mock LLM — 고정 RCA JSON 반환
+  mock-llm:
+    image: python:3.12-alpine
+    command: ["python", "/app/mock-llm.py"]
+    volumes:
+      - ./deploy/local/mock-llm.py:/app/mock-llm.py:ro
+    expose:
+      - "8080"
+
+  # 알림 sink — notifier webhook을 받아 본문을 로그로 출력
+  notify-sink:
+    image: python:3.12-alpine
+    command: ["python", "/app/notify-sink.py"]
+    volumes:
+      - ./deploy/local/notify-sink.py:/app/notify-sink.py:ro
+    expose:
+      - "8080"
+
+  # KubeSentinel 백엔드 (webhook 수신 → 진단 → 알림)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      KUBESENTINEL_AI_ENDPOINT: http://mock-llm:8080/v1
+      KUBESENTINEL_AI_MODEL: mock-model
+      KUBESENTINEL_AI_NOTIFIER_TYPE: slack
+      KUBESENTINEL_AI_NOTIFIER_WEBHOOK: http://notify-sink:8080/
+      # 선택: 실제 관측 스택이 있으면 주입 (없으면 비워두어 skip)
+      # KUBESENTINEL_AI_PROMETHEUS_URL: ""
+      # KUBESENTINEL_AI_LOKI_URL: ""
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mock-llm
+      - notify-sink
+
+  # Operator 대시보드 (mock 모드 — 백엔드 조회 API 연동 전)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8080"

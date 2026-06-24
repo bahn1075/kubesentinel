@@ -1,0 +1,66 @@
+# 로컬(minikube) 테스트용 mock 스택 — 클러스터 내에서 alert→RCA→알림 흐름 검증.
+# python 스크립트는 ConfigMap(mock-llm-script / notify-sink-script)으로 주입한다.
+#   kubectl -n kubesentinel create configmap mock-llm-script    --from-file=mock-llm.py=deploy/local/mock-llm.py
+#   kubectl -n kubesentinel create configmap notify-sink-script --from-file=notify-sink.py=deploy/local/notify-sink.py
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-llm
+  labels: { app: mock-llm }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: mock-llm } }
+  template:
+    metadata:
+      labels: { app: mock-llm }
+    spec:
+      containers:
+        - name: mock-llm
+          image: python:3.12-alpine
+          command: ["python", "/app/mock-llm.py"]
+          ports: [{ containerPort: 8080 }]
+          volumeMounts:
+            - { name: script, mountPath: /app }
+      volumes:
+        - name: script
+          configMap: { name: mock-llm-script }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-llm
+spec:
+  selector: { app: mock-llm }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notify-sink
+  labels: { app: notify-sink }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: notify-sink } }
+  template:
+    metadata:
+      labels: { app: notify-sink }
+    spec:
+      containers:
+        - name: notify-sink
+          image: python:3.12-alpine
+          command: ["python", "/app/notify-sink.py"]
+          ports: [{ containerPort: 8080 }]
+          volumeMounts:
+            - { name: script, mountPath: /app }
+      volumes:
+        - name: script
+          configMap: { name: notify-sink-script }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notify-sink
+spec:
+  selector: { app: notify-sink }
+  ports: [{ port: 8080, targetPort: 8080 }]

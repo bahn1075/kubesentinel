@@ -1,0 +1,20 @@
+apiVersion: v2
+name: kubesentinel-ai
+description: |
+  AI 기반 Kubernetes remediation 시스템.
+  Prometheus/Alertmanager·Loki 신호를 수집하고 OpenAI 호환 LLM으로 RCA를 수행한 뒤,
+  정책 범위 안에서 GitOps PR을 만들고 알림 채널로 승인 요청을 보낸다.
+type: application
+version: 0.1.0        # chart 버전
+appVersion: "0.1.0"  # 애플리케이션(이미지) 버전 — image.tag 미지정 시 기본값
+keywords:
+  - kubernetes
+  - aiops
+  - remediation
+  - gitops
+  - sre
+home: https://github.com/your-org/kubesentinel-ai
+sources:
+  - https://github.com/your-org/kubesentinel-ai
+maintainers:
+  - name: KubeSentinel
