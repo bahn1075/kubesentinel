@@ -3,7 +3,7 @@
 
 REGISTRY ?= ghcr.io/your-org
 IMAGE    ?= $(REGISTRY)/kubesentinel-ai
-FE_IMAGE ?= $(REGISTRY)/kubesentinel-ai-frontend
+FE_IMAGE ?= $(REGISTRY)/kubesentinel-ai-front
 TAG      ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 PLATFORMS ?= linux/amd64,linux/arm64
 

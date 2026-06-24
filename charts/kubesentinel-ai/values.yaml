@@ -79,7 +79,7 @@ frontend:
   enabled: true
   replicaCount: 1
   image:
-    repository: ghcr.io/your-org/kubesentinel-ai-frontend
+    repository: ghcr.io/your-org/kubesentinel-ai-front
     tag: ""             # 미지정 시 Chart.appVersion
     pullPolicy: IfNotPresent
   service:
