@@ -23,6 +23,16 @@ ai:
   allowExternal: false  # 외부 모델 전송 허용 (사내 규정에 따라)
   redactSecrets: true
 
+# ── Tailnet egress targets (Tailscale Kubernetes Operator) ────────
+# enabled=true면 tailnet 장비/서비스를 클러스터 Service DNS로 노출한다.
+tailnetEgress:
+  lmStudio:
+    enabled: false
+    serviceName: lm-studio-mac
+    tailnetFQDN: ""      # 예: mac.example.ts.net
+    port: 1234
+    protocol: TCP
+
 # ── Signal Collector 엔드포인트 (architecture.md §4.1) ────────────
 collector:
   prometheusUrl: ""     # 예: http://prometheus-operated.monitoring.svc:9090

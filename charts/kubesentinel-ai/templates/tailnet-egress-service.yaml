@@ -1,0 +1,17 @@
+{{- if .Values.tailnetEgress.lmStudio.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.tailnetEgress.lmStudio.serviceName | quote }}
+  labels:
+    {{- include "kubesentinel-ai.labels" . | nindent 4 }}
+  annotations:
+    tailscale.com/tailnet-fqdn: {{ required "tailnetEgress.lmStudio.tailnetFQDN is required" .Values.tailnetEgress.lmStudio.tailnetFQDN | quote }}
+spec:
+  type: ExternalName
+  externalName: placeholder
+  ports:
+    - name: lm-studio
+      port: {{ .Values.tailnetEgress.lmStudio.port }}
+      protocol: {{ .Values.tailnetEgress.lmStudio.protocol }}
+{{- end }}

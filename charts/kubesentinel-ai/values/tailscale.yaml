@@ -13,8 +13,16 @@ frontend:
     pullPolicy: Always
 
 ai:
-  endpoint: "http://localhost:1234/v1"   # placeholder, 실값은 DB Settings
+  endpoint: "http://lm-studio-mac:1234/v1"
   model: "set-in-ui"
+
+tailnetEgress:
+  lmStudio:
+    enabled: true
+    serviceName: lm-studio-mac
+    tailnetFQDN: mac.tail651fca.ts.net
+    port: 1234
+    protocol: TCP
 
 # OKE: in-chart postgres 미사용 — 클러스터에 이미 서비스 중인 PostgreSQL에 연결
 # (postgresql.postgres.svc.cluster.local:5432). DSN은 git이 아닌 k8s Secret 참조.
