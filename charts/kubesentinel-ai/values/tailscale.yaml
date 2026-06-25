@@ -16,9 +16,13 @@ ai:
   endpoint: "http://localhost:1234/v1"   # placeholder, 실값은 DB Settings
   model: "set-in-ui"
 
-# OKE: postgres RWO PVC는 블록볼륨(oci-bv) 사용 (기본 oci-fss는 부적합)
+# OKE: in-chart postgres 미사용 — 클러스터에 이미 서비스 중인 PostgreSQL에 연결
+# (postgresql.postgres.svc.cluster.local:5432). DSN은 git이 아닌 k8s Secret 참조.
 postgres:
-  storageClassName: oci-bv
+  enabled: false
+database:
+  existingSecret: kubesentinel-db-url   # kubesentinel ns에 별도 생성(아래 안내)
+  existingSecretKey: url
 
 expose:
   mode: tailscale

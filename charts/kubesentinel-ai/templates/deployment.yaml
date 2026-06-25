@@ -68,10 +68,18 @@ spec:
                   key: gitToken
                   optional: true
             # ── 설정 영속화 DB (architecture.md §6 Phase A) ──
+            {{- if .Values.database.existingSecret }}
+            - name: KUBESENTINEL_AI_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else }}
             {{- $dsn := include "kubesentinel-ai.databaseURL" . }}
             {{- if $dsn }}
             - name: KUBESENTINEL_AI_DATABASE_URL
               value: {{ $dsn | quote }}
+            {{- end }}
             {{- end }}
             # NOTE: ai.allowExternal / ai.redactSecrets / ai.providerType / gitops.* /
             # collector.logLines / logLevel 은 아직 config가 env로 읽지 않는다.

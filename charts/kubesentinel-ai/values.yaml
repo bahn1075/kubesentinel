@@ -56,6 +56,10 @@ database:
   # 외부 DB를 쓰려면 여기에 DSN을 넣는다(설정 시 in-chart postgres 주소보다 우선).
   # 비워두면 postgres.enabled=true일 때 in-chart 서비스로 자동 구성된다.
   url: ""
+  # 민감정보(비밀번호 포함 DSN)를 git에 두지 않으려면, DSN을 담은 기존 Secret을 참조한다.
+  # 우선순위: existingSecret > url > in-chart postgres
+  existingSecret: ""        # 전체 DSN을 담은 Secret 이름 (kubesentinel ns)
+  existingSecretKey: url    # 그 Secret에서 DSN이 들어있는 키
 
 # ── 민감정보 ──────────────────────────────────────────────────────
 # secret.create=true 면 아래 값으로 Secret을 생성한다(데모/부트스트랩용).
