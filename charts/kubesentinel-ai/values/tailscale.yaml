@@ -1,19 +1,24 @@
 # 환경: oci-oke (tailscale operator — Ingress class=tailscale → tailnet HTTPS)
 # 결과 주소: https://<tailscaleHostname>.<tailnet>.ts.net
 # helm ... -f values.yaml -f values/tailscale.yaml
+# OKE는 cri-o라 short-name enforcing → 레지스트리 포함 FQN 필수
 image:
-  repository: bahn1075/kubesentinel-ai
+  repository: docker.io/bahn1075/kubesentinel-ai
   tag: latest
   pullPolicy: Always
 frontend:
   image:
-    repository: bahn1075/kubesentinel-ai-front
+    repository: docker.io/bahn1075/kubesentinel-ai-front
     tag: latest
     pullPolicy: Always
 
 ai:
   endpoint: "http://localhost:1234/v1"   # placeholder, 실값은 DB Settings
   model: "set-in-ui"
+
+# OKE: postgres RWO PVC는 블록볼륨(oci-bv) 사용 (기본 oci-fss는 부적합)
+postgres:
+  storageClassName: oci-bv
 
 expose:
   mode: tailscale

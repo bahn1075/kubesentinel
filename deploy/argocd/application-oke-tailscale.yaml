@@ -1,0 +1,29 @@
+# oci-oke argocd Application — KubeSentinel (tailscale 노출 모드)
+# 적용: kubectl --context oke-oci apply -f deploy/argocd/application-oke-tailscale.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kubesentinel
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/bahn1075/kubesentinel.git
+    targetRevision: main
+    path: charts/kubesentinel-ai
+    helm:
+      valueFiles:
+        - values.yaml
+        - values/tailscale.yaml
+  destination:
+    server: https://kubernetes.default.svc   # oke 자기 자신(in-cluster)
+    namespace: kubesentinel
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

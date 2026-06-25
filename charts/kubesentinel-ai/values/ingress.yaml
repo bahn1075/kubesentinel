@@ -1,12 +1,12 @@
 # 환경: 일반 CSP Kubernetes (ingress-nginx + CSP LoadBalancer)
 # helm ... -f values.yaml -f values/ingress.yaml
 image:
-  repository: bahn1075/kubesentinel-ai
+  repository: docker.io/bahn1075/kubesentinel-ai
   tag: latest
   pullPolicy: Always
 frontend:
   image:
-    repository: bahn1075/kubesentinel-ai-front
+    repository: docker.io/bahn1075/kubesentinel-ai-front
     tag: latest
     pullPolicy: Always
 

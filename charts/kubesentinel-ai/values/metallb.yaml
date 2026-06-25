@@ -1,12 +1,12 @@
 # 환경: minikube (metallb — Service type=LoadBalancer로 IP 할당)
 # helm ... -f values.yaml -f values/metallb.yaml
 image:
-  repository: bahn1075/kubesentinel-ai
+  repository: docker.io/bahn1075/kubesentinel-ai
   tag: latest
   pullPolicy: Always
 frontend:
   image:
-    repository: bahn1075/kubesentinel-ai-front
+    repository: docker.io/bahn1075/kubesentinel-ai-front
     tag: latest
     pullPolicy: Always
 
