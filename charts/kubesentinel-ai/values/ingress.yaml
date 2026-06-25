@@ -1,0 +1,26 @@
+# 환경: 일반 CSP Kubernetes (ingress-nginx + CSP LoadBalancer)
+# helm ... -f values.yaml -f values/ingress.yaml
+image:
+  repository: bahn1075/kubesentinel-ai
+  tag: latest
+  pullPolicy: Always
+frontend:
+  image:
+    repository: bahn1075/kubesentinel-ai-front
+    tag: latest
+    pullPolicy: Always
+
+# AI endpoint는 부팅 검증 통과용 placeholder. 실제 값은 대시보드 Settings(DB)에서 주입됨.
+ai:
+  endpoint: "http://localhost:1234/v1"
+  model: "set-in-ui"
+
+expose:
+  mode: ingress-nginx
+  ingressClassName: nginx
+  host: kubesentinel.example.com    # 실제 도메인으로 교체
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  tls: []
+    # - secretName: kubesentinel-tls
+    #   hosts: [ kubesentinel.example.com ]

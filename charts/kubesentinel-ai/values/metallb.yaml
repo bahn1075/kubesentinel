@@ -1,0 +1,25 @@
+# 환경: minikube (metallb — Service type=LoadBalancer로 IP 할당)
+# helm ... -f values.yaml -f values/metallb.yaml
+image:
+  repository: bahn1075/kubesentinel-ai
+  tag: latest
+  pullPolicy: Always
+frontend:
+  image:
+    repository: bahn1075/kubesentinel-ai-front
+    tag: latest
+    pullPolicy: Always
+
+ai:
+  endpoint: "http://localhost:1234/v1"   # placeholder, 실값은 DB Settings
+  model: "set-in-ui"
+
+# minikube의 mock 알림 sink로 전송(검토 편의). 없으면 비워두면 noop.
+secret:
+  notifierWebhook: "http://notify-sink:8080/"
+
+expose:
+  mode: metallb
+  # minikube metallb addon은 단일 풀(default)이라 주석 불필요.
+  # 특정 풀 지정 시: { metallb.universe.tf/address-pool: default }
+  loadBalancerAnnotations: {}

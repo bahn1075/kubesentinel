@@ -83,8 +83,7 @@ frontend:
     tag: ""             # 미지정 시 Chart.appVersion
     pullPolicy: IfNotPresent
   service:
-    type: ClusterIP
-    port: 80            # → 컨테이너 8080(nginx-unprivileged)
+    port: 80            # → 컨테이너 8080(nginx). 서비스 타입은 expose.mode가 결정
   resources:
     requests:
       cpu: 10m
@@ -93,15 +92,23 @@ frontend:
       cpu: 100m
       memory: 128Mi
 
-# ── Ingress (UI 노출 + /api → 백엔드 라우팅) ──────────────────────
-ingress:
-  enabled: false
-  className: ""
-  annotations: {}
+# ── 외부 노출 (환경별 다중화) ─────────────────────────────────────
+# 노출 대상은 frontend 서비스(UI + nginx가 /api를 백엔드로 프록시). 백엔드 webhook은 in-cluster 전용.
+# mode:
+#   ingress-nginx : CSP LoadBalancer + ingress-nginx (host 기반)        → 일반 CSP k8s
+#   metallb       : Service type=LoadBalancer (metallb가 IP 할당)        → minikube
+#   tailscale     : Ingress(class=tailscale) → <hostname>.<tailnet>.ts.net → oci-oke
+expose:
+  mode: ingress-nginx
+  # [ingress-nginx]
+  ingressClassName: nginx
   host: kubesentinel.example.com
+  annotations: {}
   tls: []               # [{ secretName: ..., hosts: [...] }]
-  # path 라우팅: "/" → frontend, "/api" → backend(향후 조회 API)
-  apiPathPrefix: /api
+  # [tailscale] tailnet HTTPS 호스트네임 (결과: <hostname>.<tailnet>.ts.net)
+  tailscaleHostname: kubesentinel
+  # [metallb] LoadBalancer 서비스 주석 (예: metallb.universe.tf/address-pool)
+  loadBalancerAnnotations: {}
 
 serviceAccount:
   create: true

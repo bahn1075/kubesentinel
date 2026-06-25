@@ -1,0 +1,20 @@
+# 환경: oci-oke (tailscale operator — Ingress class=tailscale → tailnet HTTPS)
+# 결과 주소: https://<tailscaleHostname>.<tailnet>.ts.net
+# helm ... -f values.yaml -f values/tailscale.yaml
+image:
+  repository: bahn1075/kubesentinel-ai
+  tag: latest
+  pullPolicy: Always
+frontend:
+  image:
+    repository: bahn1075/kubesentinel-ai-front
+    tag: latest
+    pullPolicy: Always
+
+ai:
+  endpoint: "http://localhost:1234/v1"   # placeholder, 실값은 DB Settings
+  model: "set-in-ui"
+
+expose:
+  mode: tailscale
+  tailscaleHostname: kubesentinel        # → kubesentinel.<tailnet>.ts.net

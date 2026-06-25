@@ -5,8 +5,13 @@ metadata:
   name: {{ include "kubesentinel-ai.frontend.fullname" . }}
   labels:
     {{- include "kubesentinel-ai.frontend.labels" . | nindent 4 }}
+  {{- if and (eq .Values.expose.mode "metallb") .Values.expose.loadBalancerAnnotations }}
+  annotations:
+    {{- toYaml .Values.expose.loadBalancerAnnotations | nindent 4 }}
+  {{- end }}
 spec:
-  type: {{ .Values.frontend.service.type }}
+  # metallb 모드에서만 LoadBalancer, 그 외(ingress-nginx/tailscale)는 ClusterIP
+  type: {{ if eq .Values.expose.mode "metallb" }}LoadBalancer{{ else }}ClusterIP{{ end }}
   selector:
     {{- include "kubesentinel-ai.frontend.selectorLabels" . | nindent 4 }}
   ports:

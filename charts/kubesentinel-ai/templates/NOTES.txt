@@ -25,11 +25,15 @@ In-cluster 서비스 주소 (Alertmanager webhook receiver가 POST할 대상):
 
 {{- if .Values.frontend.enabled }}
 
-대시보드(UI):
-{{- if .Values.ingress.enabled }}
-  http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.host }}/   (Ingress, /api → 백엔드)
-{{- else }}
-  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "kubesentinel-ai.frontend.fullname" . }} 8080:{{ .Values.frontend.service.port }}
-  # 브라우저: http://localhost:8080  (현재 mock 모드 — 백엔드 조회 API 연동 전)
+대시보드(UI) — expose.mode = {{ .Values.expose.mode }}:
+{{- if eq .Values.expose.mode "ingress-nginx" }}
+  http{{ if .Values.expose.tls }}s{{ end }}://{{ .Values.expose.host }}/   (ingress-nginx → CSP LB)
+{{- else if eq .Values.expose.mode "tailscale" }}
+  https://{{ .Values.expose.tailscaleHostname }}.<tailnet>.ts.net   (tailscale operator가 프로비저닝)
+  상태: kubectl -n {{ .Release.Namespace }} get ingress {{ include "kubesentinel-ai.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+{{- else if eq .Values.expose.mode "metallb" }}
+  kubectl -n {{ .Release.Namespace }} get svc {{ include "kubesentinel-ai.frontend.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+  # 위 EXTERNAL-IP:{{ .Values.frontend.service.port }} 로 접속 (필요 시 minikube tunnel)
 {{- end }}
+  로컬 확인:  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "kubesentinel-ai.frontend.fullname" . }} 8080:{{ .Values.frontend.service.port }}
 {{- end }}
