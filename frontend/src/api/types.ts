@@ -74,10 +74,18 @@ export interface RemediationPolicy {
 
 // architecture.md §4.2 AIProvider / §4.7 Notifier / §4.5 GitOps (설정 뷰)
 export interface ProviderSettings {
-  // 주의: 비민감 설정만 DB에 저장된다. 민감정보(AI apiKey, notifier webhook, git token)는
-  // k8s Secret/env로 관리하며 이 타입/Settings API에 포함되지 않는다. (architecture.md R8)
-  ai: { type: string; endpoint: string; model: string; allowExternal: boolean; redactSecrets: boolean };
-  collector: { prometheusUrl: string; lokiUrl: string; grafanaUrl: string };
+  // 비민감 설정만 여기에. 민감정보(AI api key, git token)는 /api/secrets(write-only)로 분리.
+  ai: {
+    kind: string;          // frontier | local
+    provider: string;      // (frontier) openai | anthropic | azure-openai | google | custom
+    type: string;          // API 형식 (openai-compatible)
+    endpoint: string;
+    model: string;
+    authMethod: string;    // (frontier) api-key | oauth | machine
+    allowExternal: boolean;
+    redactSecrets: boolean;
+  };
+  collector: { prometheusUrl: string; lokiUrl: string; alertmanagerUrl: string; grafanaUrl: string };
   notifier: { type: string };
-  gitops: { provider: string; repository: string; baseBranch: string };
+  git: { provider: string; authMethod: string; repository: string; baseBranch: string };
 }

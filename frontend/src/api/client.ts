@@ -59,6 +59,22 @@ export async function saveSettings(s: ProviderSettings): Promise<ProviderSetting
   return putJSON<ProviderSettings>("/settings", s);
 }
 
+// ── 민감정보 (write-only) ─────────────────────────────────────────
+export interface SecretsStatus {
+  aiApiKey: boolean;
+  gitToken: boolean;
+}
+
+// 어떤 시크릿이 설정돼 있는지 여부만 (값은 절대 반환되지 않음)
+export async function fetchSecretsStatus(): Promise<SecretsStatus> {
+  return getJSON<SecretsStatus>("/secrets");
+}
+
+// 시크릿 설정/변경/삭제. 값 있음=설정, ""=삭제, null/미포함=변경없음.
+export async function saveSecrets(patch: { aiApiKey?: string | null; gitToken?: string | null }): Promise<SecretsStatus> {
+  return putJSON<SecretsStatus>("/secrets", patch);
+}
+
 // 미래 기능(MVP-2): 승인/반려 액션. 현재는 비활성(백엔드 미구현).
 export async function decideApproval(_id: string, _decision: "approve" | "reject"): Promise<void> {
   // TODO(backend): POST /api/incidents/:id/approval { decision }
@@ -89,7 +105,9 @@ export async function fetchAIStatus(): Promise<AIStatus> {
   return getJSON<AIStatus>("/ai/status");
 }
 
-// 백엔드 → 활성 제공자 health check (백엔드가 host.minikube.internal 등 실제 주소로 호출)
-export async function checkAIHealth(): Promise<AIHealth> {
-  return getJSON<AIHealth>("/ai/health");
+// 백엔드 → health check. endpoint를 주면 폼에 입력한 주소를 즉시 검사(저장/재시작 불필요).
+// API key는 백엔드가 DB 시크릿에서 실시간 조회.
+export async function checkAIHealth(endpoint?: string): Promise<AIHealth> {
+  const q = endpoint ? `?endpoint=${encodeURIComponent(endpoint)}` : "";
+  return getJSON<AIHealth>(`/ai/health${q}`);
 }

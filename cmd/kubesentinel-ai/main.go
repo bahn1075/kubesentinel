@@ -42,6 +42,15 @@ func main() {
 			applyDBSettings(cfg, s)
 			fmt.Println("Applied settings from database (non-sensitive overrides).")
 		}
+
+		// 시크릿(write-only DB) 로드 → cfg 주입 (env보다 우선)
+		if v, ok, _ := st.GetSecret(models.SecretAIAPIKey); ok && v != "" {
+			cfg.AI.APIKey = v
+			fmt.Println("Loaded AI API key from database secret.")
+		}
+		if v, ok, _ := st.GetSecret(models.SecretGitToken); ok && v != "" {
+			cfg.GitOps.Token = v
+		}
 	} else {
 		fmt.Println("DATABASE_URL not set — settings persistence disabled.")
 	}
@@ -98,13 +107,13 @@ func applyDBSettings(cfg *config.Config, s models.AppSettings) {
 		cfg.Notifier.Type = s.Notifier.Type
 	}
 
-	if s.GitOps.Provider != "" {
-		cfg.GitOps.Provider = s.GitOps.Provider
+	if s.Git.Provider != "" {
+		cfg.GitOps.Provider = s.Git.Provider
 	}
-	if s.GitOps.Repository != "" {
-		cfg.GitOps.Repository = s.GitOps.Repository
+	if s.Git.Repository != "" {
+		cfg.GitOps.Repository = s.Git.Repository
 	}
-	if s.GitOps.BaseBranch != "" {
-		cfg.GitOps.BaseBranch = s.GitOps.BaseBranch
+	if s.Git.BaseBranch != "" {
+		cfg.GitOps.BaseBranch = s.Git.BaseBranch
 	}
 }

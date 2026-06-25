@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"kubesentinel-ai/internal/models"
 )
 
 // AIStatus는 현재 백엔드가 연결하도록 설정된(활성) AI 제공자 정보입니다.
@@ -41,22 +43,35 @@ func (s *WebhookServer) handleAIStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleAIHealth는 백엔드에서 활성 제공자로 health check(GET /models)를 수행합니다.
-// GET /api/ai/health
+// handleAIHealth는 health check(GET /models)를 수행합니다. GET /api/ai/health
+//
+//	?endpoint=<url> : 폼에 입력한 엔드포인트를 즉시 검사(미지정 시 활성 설정 사용)
+//
+// API key는 DB 시크릿에서 실시간 조회(저장 직후 재시작 없이 검사 가능). 없으면 env값 사용.
 func (s *WebhookServer) handleAIHealth(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	endpoint := r.URL.Query().Get("endpoint")
+	if endpoint == "" {
+		endpoint = s.AI.Endpoint
+	}
+	apiKey := s.AI.APIKey
+	if s.Store != nil {
+		if v, ok, _ := s.Store.GetSecret(models.SecretAIAPIKey); ok && v != "" {
+			apiKey = v
+		}
+	}
 	start := time.Now()
-	models, err := fetchProviderModels(s.AI.Endpoint, s.AI.APIKey)
-	res := AIHealth{LatencyMs: time.Since(start).Milliseconds(), Models: models}
+	modelList, err := fetchProviderModels(endpoint, apiKey)
+	res := AIHealth{LatencyMs: time.Since(start).Milliseconds(), Models: modelList}
 	if err != nil {
 		res.Healthy = false
 		res.Error = err.Error()
 	} else {
 		res.Healthy = true
-		for _, m := range models {
+		for _, m := range modelList {
 			if m == s.AI.Model {
 				res.ModelAvailable = true
 				break

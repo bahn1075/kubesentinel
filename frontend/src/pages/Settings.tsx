@@ -1,10 +1,26 @@
 import { useEffect, useState } from "react";
 import type { ProviderSettings } from "../api/types";
-import { fetchSettings, saveSettings, fetchAIStatus, checkAIHealth, type AIStatus, type AIHealth } from "../api/client";
+import {
+  fetchSettings, saveSettings, fetchAIStatus, checkAIHealth,
+  fetchSecretsStatus, saveSecrets,
+  type AIStatus, type AIHealth, type SecretsStatus,
+} from "../api/client";
 
-// AIProvider / Collector / Notifier / GitOps 설정 편집 (architecture.md §4).
-// 비민감 설정은 백엔드 API(/api/settings → Postgres)에 저장된다.
-// 민감정보(API Key/token)는 DB가 아닌 k8s Secret/env로 관리한다.
+// frontier provider별 기본 엔드포인트 (OpenAI 호환 base)
+const FRONTIER_ENDPOINTS: Record<string, string> = {
+  openai: "https://api.openai.com/v1",
+  anthropic: "https://api.anthropic.com/v1",
+  "azure-openai": "",
+  google: "https://generativelanguage.googleapis.com/v1beta/openai",
+  custom: "",
+};
+// git provider별 인증 방식 (token만 동작, 나머지 준비중)
+const GIT_AUTH: Record<string, { value: string; label: string }[]> = {
+  github: [{ value: "token", label: "Personal Access Token" }, { value: "oauth", label: "OAuth (준비 중)" }, { value: "ssh", label: "SSH 키 (준비 중)" }],
+  gitlab: [{ value: "token", label: "Personal Access Token" }, { value: "oauth", label: "OAuth (준비 중)" }, { value: "ssh", label: "SSH 키 (준비 중)" }],
+  gitea: [{ value: "token", label: "Access Token" }, { value: "ssh", label: "SSH 키 (준비 중)" }],
+};
+
 export default function Settings() {
   const [s, setS] = useState<ProviderSettings | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
@@ -12,8 +28,12 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
 
-  // 활성 제공자 정보 + health check
   const [status, setStatus] = useState<AIStatus | null>(null);
+  const [secretsSet, setSecretsSet] = useState<SecretsStatus>({ aiApiKey: false, gitToken: false });
+  // 새로 입력한 시크릿(저장 시 전송). 빈 문자열이면 변경 없음으로 취급.
+  const [aiApiKeyInput, setAiApiKeyInput] = useState("");
+  const [gitTokenInput, setGitTokenInput] = useState("");
+
   const [checking, setChecking] = useState(false);
   const [health, setHealth] = useState<AIHealth | null>(null);
   const [healthErr, setHealthErr] = useState<string | null>(null);
@@ -21,6 +41,7 @@ export default function Settings() {
   useEffect(() => {
     fetchSettings().then(setS).catch((e) => setLoadErr(String(e)));
     fetchAIStatus().then(setStatus).catch(() => setStatus(null));
+    fetchSecretsStatus().then(setSecretsSet).catch(() => {});
   }, []);
 
   function update<K extends keyof ProviderSettings>(section: K, patch: Partial<ProviderSettings[K]>) {
@@ -30,11 +51,18 @@ export default function Settings() {
 
   async function onSave() {
     if (!s) return;
-    setSaving(true);
-    setSaveErr(null);
+    setSaving(true); setSaveErr(null);
     try {
       const persisted = await saveSettings(s);
       setS(persisted);
+      // 입력된 시크릿만 전송 (빈 문자열 = 변경 없음 → null)
+      const patch: { aiApiKey?: string | null; gitToken?: string | null } = {};
+      if (aiApiKeyInput) patch.aiApiKey = aiApiKeyInput;
+      if (gitTokenInput) patch.gitToken = gitTokenInput;
+      if (patch.aiApiKey !== undefined || patch.gitToken !== undefined) {
+        setSecretsSet(await saveSecrets(patch));
+        setAiApiKeyInput(""); setGitTokenInput("");
+      }
       setSaved(true);
     } catch (e) {
       setSaveErr(e instanceof Error ? e.message : String(e));
@@ -44,11 +72,10 @@ export default function Settings() {
   }
 
   async function onCheckHealth() {
-    setChecking(true);
-    setHealth(null);
-    setHealthErr(null);
+    if (!s) return;
+    setChecking(true); setHealth(null); setHealthErr(null);
     try {
-      setHealth(await checkAIHealth());
+      setHealth(await checkAIHealth(s.ai.endpoint || undefined));
     } catch (e) {
       setHealthErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -56,96 +83,102 @@ export default function Settings() {
     }
   }
 
+  function onChangeProvider(p: string) {
+    const ep = FRONTIER_ENDPOINTS[p];
+    update("ai", { provider: p, ...(ep !== undefined && (!s?.ai.endpoint || Object.values(FRONTIER_ENDPOINTS).includes(s?.ai.endpoint || "")) ? { endpoint: ep } : {}) });
+  }
+
   if (loadErr) return <p className="test-result err">설정 로드 실패: {loadErr}</p>;
   if (!s) return <p className="muted">로딩 중…</p>;
 
-  const kindLabel = (k?: string) => (k === "frontier" ? "프론티어" : k === "local" ? "로컬" : "알 수 없음");
+  const isLocal = s.ai.kind === "local";
+  const isFrontier = s.ai.kind === "frontier";
 
   return (
     <>
       <h1 className="page-title">Settings</h1>
-      <p className="page-sub">플랫폼 연동 설정. 비민감 항목은 백엔드 DB에 저장됩니다 (민감정보는 k8s Secret으로 관리).</p>
+      <p className="page-sub">설정은 백엔드 DB에 저장됩니다. 민감정보(키/토큰)는 write-only로 저장되어 값은 다시 표시되지 않습니다.</p>
 
-      {/* AI Provider */}
+      {/* ── AI Provider ── */}
       <div className="section">
         <h3>AI Provider</h3>
         <div className="form-grid">
-          <label>Type</label>
-          <select value={s.ai.type} onChange={(e) => update("ai", { type: e.target.value })}>
-            <option value="openai-compatible">openai-compatible</option>
-          </select>
+          <label>종류</label>
+          <div className="btn-row">
+            <label className="chk"><input type="radio" name="aikind" checked={isLocal} onChange={() => update("ai", { kind: "local" })} /> 로컬 (LM Studio·Ollama 등)</label>
+            <label className="chk"><input type="radio" name="aikind" checked={isFrontier} onChange={() => update("ai", { kind: "frontier" })} /> 프론티어 (OpenAI·Anthropic 등)</label>
+          </div>
 
-          <label>Endpoint</label>
-          <input value={s.ai.endpoint} placeholder="http://host.minikube.internal:1234/v1"
+          {isFrontier && <>
+            <label>제공자</label>
+            <select value={s.ai.provider} onChange={(e) => onChangeProvider(e.target.value)}>
+              <option value="">선택…</option>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="azure-openai">Azure OpenAI</option>
+              <option value="google">Google Gemini</option>
+              <option value="custom">Custom</option>
+            </select>
+
+            <label>인증 방식</label>
+            <select value={s.ai.authMethod} onChange={(e) => update("ai", { authMethod: e.target.value })}>
+              <option value="api-key">API Key</option>
+              <option value="oauth">OAuth (준비 중)</option>
+              <option value="machine">Machine 인증 (준비 중)</option>
+            </select>
+
+            {s.ai.authMethod === "api-key" && <>
+              <label>API Key</label>
+              <input type="password" placeholder={secretsSet.aiApiKey ? "설정됨 — 변경 시 새 값 입력" : "sk-..."}
+                value={aiApiKeyInput} onChange={(e) => { setAiApiKeyInput(e.target.value); setSaved(false); }} />
+            </>}
+            {s.ai.authMethod !== "api-key" && (
+              <><label></label><span className="muted">선택한 인증 방식은 준비 중입니다. 현재는 API Key만 동작합니다.</span></>
+            )}
+          </>}
+
+          <label>Endpoint{isFrontier ? "" : ""}</label>
+          <input value={s.ai.endpoint} placeholder={isLocal ? "http://host.minikube.internal:1234/v1" : "https://api.openai.com/v1"}
             onChange={(e) => update("ai", { endpoint: e.target.value })} />
 
           <label>Model</label>
-          <input value={s.ai.model} placeholder="gemma-4-26b-a4b-it-mlx"
+          <input value={s.ai.model} placeholder="모델명 (상태확인으로 조회 후 선택)"
             onChange={(e) => update("ai", { model: e.target.value })} />
 
-          <label>API Key</label>
-          <span className="muted">k8s Secret/env로 관리 (DB 미저장)</span>
+          <label>상태 확인</label>
+          <div>
+            <button onClick={onCheckHealth} disabled={checking || !s.ai.endpoint}>
+              {checking ? "조회 중…" : "상태 확인 (모델 조회)"}
+            </button>
+          </div>
 
           <label>External 허용</label>
-          <label className="chk"><input type="checkbox" checked={s.ai.allowExternal}
-            onChange={(e) => update("ai", { allowExternal: e.target.checked })} /> 외부 모델로 evidence 전송 허용</label>
-
+          <label className="chk"><input type="checkbox" checked={s.ai.allowExternal} onChange={(e) => update("ai", { allowExternal: e.target.checked })} /> 외부 모델로 evidence 전송 허용</label>
           <label>Secret redact</label>
-          <label className="chk"><input type="checkbox" checked={s.ai.redactSecrets}
-            onChange={(e) => update("ai", { redactSecrets: e.target.checked })} /> 전송 전 시크릿 마스킹</label>
+          <label className="chk"><input type="checkbox" checked={s.ai.redactSecrets} onChange={(e) => update("ai", { redactSecrets: e.target.checked })} /> 전송 전 시크릿 마스킹</label>
         </div>
 
-        {/* 현재 연결됨(활성) — 백엔드가 실제로 사용 중인 제공자. 폼 저장 후 재시작 시 갱신됨 */}
-        <div className="provider-panel">
-          <div className="provider-head">
-            <strong>현재 연결됨</strong>
-            <span className="muted" style={{ fontSize: 12 }}>저장한 설정은 백엔드 재시작 시 반영</span>
+        {healthErr && <div className="test-result err">연결 실패: {healthErr}</div>}
+        {health && (health.healthy ? (
+          <div className="test-result ok">
+            <strong>연결 성공</strong> ({health.latencyMs}ms) — {health.models.length}개 모델 (클릭하면 Model에 적용):
+            <div className="model-chips">
+              {health.models.map((m) => (
+                <button key={m} type="button" className={`model-chip ${m === s.ai.model ? "active" : ""}`}
+                  onClick={() => update("ai", { model: m })}>{m}{m === s.ai.model ? " ✓" : ""}</button>
+              ))}
+            </div>
           </div>
-          {status ? (
-            <div className="kv">
-              <span className="k">제공자 종류</span>
-              <span><span className={`badge ${status.providerKind === "frontier" ? "warn" : status.providerKind === "local" ? "ok" : "dim"}`}>{kindLabel(status.providerKind)}</span></span>
-              <span className="k">제공자</span><span>{status.providerName}</span>
-              <span className="k">모델</span><span className="mono">{status.model || "—"}</span>
-              <span className="k">Endpoint</span><span className="mono">{status.endpoint || "—"}</span>
-            </div>
-          ) : (
-            <p className="muted">활성 제공자 정보를 불러올 수 없습니다.</p>
-          )}
+        ) : <div className="test-result err">연결 실패: {health.error}</div>)}
 
-          <div className="btn-row" style={{ marginTop: 12 }}>
-            <button onClick={onCheckHealth} disabled={checking}>{checking ? "확인 중…" : "상태 확인"}</button>
-            {health && health.healthy && (
-              <span className="badge ok">정상 · {health.latencyMs}ms · 모델 {health.models.length}개{health.modelAvailable ? " · 설정 모델 사용가능 ✓" : ""}</span>
-            )}
-            {health && !health.healthy && <span className="badge crit">비정상</span>}
-          </div>
-
-          {health && !health.healthy && <div className="test-result err" style={{ marginTop: 8 }}>{health.error}</div>}
-          {healthErr && <div className="test-result err" style={{ marginTop: 8 }}>상태 확인 실패: {healthErr}</div>}
-          {health && health.healthy && !health.modelAvailable && status?.model && (
-            <div className="test-result err" style={{ marginTop: 8 }}>
-              ⚠️ 설정된 모델 <code>{status.model}</code> 이(가) 제공자 모델 목록에 없습니다.
-            </div>
-          )}
-          {health && health.healthy && health.models.length > 0 && (
-            <div className="test-result ok" style={{ marginTop: 8 }}>
-              사용 가능 모델 (클릭하면 위 Model 필드에 적용):
-              <div className="model-chips">
-                {health.models.map((m) => (
-                  <button key={m} type="button"
-                    className={`model-chip ${m === s.ai.model ? "active" : ""}`}
-                    onClick={() => update("ai", { model: m })}>
-                    {m}{m === s.ai.model ? " ✓" : ""}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        {status && (
+          <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+            현재 활성(백엔드): {status.providerName} · {status.model || "(모델 미설정)"} — 저장 후 백엔드 재시작 시 반영
+          </p>
+        )}
       </div>
 
-      {/* Collector */}
+      {/* ── Collector ── */}
       <div className="section">
         <h3>Collector</h3>
         <div className="form-grid">
@@ -155,13 +188,21 @@ export default function Settings() {
           <label>Loki</label>
           <input value={s.collector.lokiUrl} placeholder="http://loki-gateway.monitoring.svc:80"
             onChange={(e) => update("collector", { lokiUrl: e.target.value })} />
+          <label>Alertmanager</label>
+          <input value={s.collector.alertmanagerUrl} placeholder="http://alertmanager-operated.monitoring.svc:9093"
+            onChange={(e) => update("collector", { alertmanagerUrl: e.target.value })} />
           <label>Grafana</label>
           <input value={s.collector.grafanaUrl} placeholder="(선택) 알림 딥링크용"
             onChange={(e) => update("collector", { grafanaUrl: e.target.value })} />
         </div>
+        <div className="test-result" style={{ background: "var(--bg-elev2)" }}>
+          ℹ️ KubeSentinel은 Alertmanager의 <b>수신자</b>입니다. Alertmanager 설정에 아래 receiver를 추가하세요:
+          <div className="mono" style={{ marginTop: 6 }}>http://&lt;backend-svc&gt;.&lt;namespace&gt;.svc:8080/v1/alerts</div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>위 Alertmanager URL은 추후 alert 상태 조회/검증에 사용됩니다(현재는 저장만).</div>
+        </div>
       </div>
 
-      {/* Notifier */}
+      {/* ── Notifier ── */}
       <div className="section">
         <h3>Notifier</h3>
         <div className="form-grid">
@@ -176,24 +217,37 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* GitOps */}
+      {/* ── Git (추후 직접 업데이트 대상) ── */}
       <div className="section">
-        <h3>GitOps <span className="tag">MVP-1</span></h3>
+        <h3>Git <span className="tag">MVP-1</span></h3>
         <div className="form-grid">
           <label>Provider</label>
-          <select value={s.gitops.provider} onChange={(e) => update("gitops", { provider: e.target.value })}>
-            <option value="github">github</option>
-            <option value="gitlab">gitlab</option>
-            <option value="bitbucket">bitbucket</option>
+          <select value={s.git.provider} onChange={(e) => update("git", { provider: e.target.value, authMethod: (GIT_AUTH[e.target.value] || [{ value: "token" }])[0].value })}>
+            <option value="github">GitHub</option>
+            <option value="gitlab">GitLab</option>
+            <option value="gitea">Gitea</option>
           </select>
+
+          <label>인증 방식</label>
+          <select value={s.git.authMethod} onChange={(e) => update("git", { authMethod: e.target.value })}>
+            {(GIT_AUTH[s.git.provider] || []).map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+          </select>
+
+          {s.git.authMethod === "token" && <>
+            <label>Token</label>
+            <input type="password" placeholder={secretsSet.gitToken ? "설정됨 — 변경 시 새 값 입력" : "ghp_... / glpat-... / gitea token"}
+              value={gitTokenInput} onChange={(e) => { setGitTokenInput(e.target.value); setSaved(false); }} />
+          </>}
+          {s.git.authMethod !== "token" && (
+            <><label></label><span className="muted">선택한 인증 방식은 준비 중입니다. 현재는 Token만 동작합니다.</span></>
+          )}
+
           <label>Repository</label>
-          <input value={s.gitops.repository} placeholder="your-org/manifests"
-            onChange={(e) => update("gitops", { repository: e.target.value })} />
+          <input value={s.git.repository} placeholder="your-org/manifests"
+            onChange={(e) => update("git", { repository: e.target.value })} />
           <label>Base branch</label>
-          <input value={s.gitops.baseBranch} placeholder="main"
-            onChange={(e) => update("gitops", { baseBranch: e.target.value })} />
-          <label>Token</label>
-          <span className="muted">k8s Secret으로 관리 (DB 미저장)</span>
+          <input value={s.git.baseBranch} placeholder="main"
+            onChange={(e) => update("git", { baseBranch: e.target.value })} />
         </div>
       </div>
 

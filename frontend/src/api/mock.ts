@@ -98,8 +98,8 @@ export const mockPolicies: RemediationPolicy[] = [
 ];
 
 export const mockSettings: ProviderSettings = {
-  ai: { type: "openai-compatible", endpoint: "", model: "", allowExternal: false, redactSecrets: true },
-  collector: { prometheusUrl: "", lokiUrl: "", grafanaUrl: "" },
+  ai: { kind: "local", provider: "", type: "openai-compatible", endpoint: "", model: "", authMethod: "api-key", allowExternal: false, redactSecrets: true },
+  collector: { prometheusUrl: "", lokiUrl: "", alertmanagerUrl: "", grafanaUrl: "" },
   notifier: { type: "slack" },
-  gitops: { provider: "github", repository: "your-org/manifests", baseBranch: "main" },
+  git: { provider: "github", authMethod: "token", repository: "", baseBranch: "main" },
 };

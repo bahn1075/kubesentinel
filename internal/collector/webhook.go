@@ -38,6 +38,7 @@ func (s *WebhookServer) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/alerts", s.handleAlertmanagerWebhook)
 	mux.HandleFunc("/api/settings", s.handleSettings)
+	mux.HandleFunc("/api/secrets", s.handleSecrets)
 	mux.HandleFunc("/api/incidents", s.handleIncidents)
 	mux.HandleFunc("/api/incidents/", s.handleIncidentDetail)
 	mux.HandleFunc("/api/ai/status", s.handleAIStatus)
