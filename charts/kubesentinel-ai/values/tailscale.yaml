@@ -14,7 +14,7 @@ frontend:
 
 ai:
   endpoint: "http://lm-studio-mac:1234/v1"
-  model: "set-in-ui"
+  model: "gemma-4-26b-a4b-it-mlx"
 
 tailnetEgress:
   lmStudio:
