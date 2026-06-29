@@ -141,9 +141,9 @@ docker compose logs -f notify-sink    # 전송된 알림
 
 ### 2. minikube (metallb)
 ```bash
-helm install kubesentinel charts/kubesentinel-ai -n kubesentinel --create-namespace \
-  -f charts/kubesentinel-ai/values.yaml \
-  -f charts/kubesentinel-ai/values/metallb.yaml
+helm install kubesentinel helm/kubesentinel-ai -n kubesentinel --create-namespace \
+  -f helm/kubesentinel-ai/values.yaml \
+  -f helm/kubesentinel-ai/values/metallb.yaml
 # 대시보드
 kubectl -n kubesentinel port-forward svc/kubesentinel-kubesentinel-ai-frontend 8080:80
 #  → http://localhost:8080
@@ -197,7 +197,7 @@ DOCKERFILE=frontend/Dockerfile CONTEXT=frontend REPO=kubesentinel-ai-front \
 | `metallb` | minikube/온프렘 | Service `type=LoadBalancer` (metallb가 IP 할당) |
 | `tailscale` | OKE(tailscale operator) | Ingress(class=tailscale) → `<name>.<tailnet>.ts.net` HTTPS |
 
-환경별 오버레이: `charts/kubesentinel-ai/values/{ingress,metallb,tailscale}.yaml`
+환경별 오버레이: `helm/kubesentinel-ai/values/{ingress,metallb,tailscale}.yaml`
 
 ---
 
@@ -215,7 +215,7 @@ kubesentinel/
 │   ├── store/                  # PostgreSQL + goose 마이그레이션
 │   └── models/                 # 도메인 모델
 ├── frontend/                   # React+Vite 대시보드 (별도 이미지)
-├── charts/kubesentinel-ai/     # Helm 차트 (+ values/ 환경별 오버레이)
+├── helm/kubesentinel-ai/     # Helm 차트 (+ values/ 환경별 오버레이)
 ├── deploy/                     # argocd Application · 로컬 mock 스택
 ├── scripts/                    # docker build/push (멀티아치)
 ├── docker-compose.yml          # 로컬 통합 테스트

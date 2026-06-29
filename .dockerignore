@@ -7,7 +7,7 @@
 *.out
 kubesentinel-ai
 docs/
-charts/
+helm/
 deploy/
 Dockerfile
 .dockerignore

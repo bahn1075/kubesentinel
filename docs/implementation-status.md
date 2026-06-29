@@ -29,11 +29,11 @@
 | Audit | `internal/audit` (빈 디렉토리) | ❌ 미구현 | |
 | Helm chart / Dockerfile | — | ❌ 미구현 | architecture §12 |
 | 테스트 | `*_test.go` | ✅ 부분 | models / provider / notifier 단위 테스트 존재. collector·engine 미커버 |
-| Dockerfile / Helm / ArgoCD | `Dockerfile`, `charts/`, `deploy/argocd/` | ✅ 동작 | multi-arch 이미지 + Helm 차트 + ArgoCD Application. `helm lint`·`docker build` 검증됨 |
+| Dockerfile / Helm / ArgoCD | `Dockerfile`, `helm/`, `deploy/argocd/` | ✅ 동작 | multi-arch 이미지 + Helm 차트 + ArgoCD Application. `helm lint`·`docker build` 검증됨 |
 | Frontend (dashboard) | `frontend/` | ✅ 동작 | React+Vite+TS. **Settings·Incidents 백엔드 API(DB) 연동**, policies/approvals는 아직 mock. nginx가 `/api`→백엔드 프록시. Helm `frontend.enabled` |
 | 설정 영속화 (Settings) | `internal/store`, `/api/settings` | ✅ 동작 | Postgres + goose 임베드 마이그레이션(v2). 비민감 설정만 저장(민감정보는 Secret/env). 기동 시 cfg에 병합되어 파이프라인이 소비(§3.6). 재시작·Pod 재생성 후 영속 검증됨 |
 | 인시던트 영속화 (Incidents) | `internal/store`, `/api/incidents` | ✅ 동작 | webhook 처리 시 `incidents` 테이블 저장 → `GET /api/incidents[/{id}]`로 대시보드 조회. camelCase 뷰가 프론트 타입과 정합 |
-| Postgres | `charts/.../postgres.yaml`, compose | ✅ 동작 | 차트 `postgres.enabled`(로컬/테스트) 또는 `database.url`(외부 DB). PVC 영속 |
+| Postgres | `helm/.../postgres.yaml`, compose | ✅ 동작 | 차트 `postgres.enabled`(로컬/테스트) 또는 `database.url`(외부 DB). PVC 영속 |
 
 범례: ✅ 동작 · [~]/부분 · ❌ 미구현
 
@@ -61,7 +61,7 @@ kubesentinel-ai/
     audit/ gitops/ policy/         # 빈 디렉토리 (플레이스홀더)
   Dockerfile / .dockerignore       # multi-arch(amd64+arm64) distroless 이미지
   Makefile                         # build/test/docker/helm 헬퍼
-  charts/kubesentinel-ai/          # Helm 차트 (백엔드 + frontend 함께 배포)
+  helm/kubesentinel-ai/          # Helm 차트 (백엔드 + frontend 함께 배포)
   deploy/argocd/application.yaml   # ArgoCD Application (GitOps 배포)
   frontend/                        # operator 대시보드 (React+Vite+TS, 별도 이미지)
     src/{api,pages,components,lib}  #   api/=타입·mock·client / pages/=화면
@@ -189,7 +189,7 @@ docker compose down
 make docker-push REGISTRY=ghcr.io/your-org TAG=v0.1.0
 
 # 2) Helm 직접 설치 (개발/검증용)
-helm install kubesentinel charts/kubesentinel-ai -n kubesentinel --create-namespace \
+helm install kubesentinel helm/kubesentinel-ai -n kubesentinel --create-namespace \
   --set image.repository=ghcr.io/your-org/kubesentinel-ai --set image.tag=v0.1.0 \
   --set ai.endpoint=http://ollama.llm.svc:11434/v1 --set ai.model=llama3 \
   --set collector.prometheusUrl=http://prometheus-operated.monitoring.svc:9090 \
@@ -202,7 +202,7 @@ kubectl apply -n argocd -f deploy/argocd/application.yaml
 
 배포 산출물 요약:
 - **Dockerfile**: `--platform=$BUILDPLATFORM` 교차컴파일 → distroless static(nonroot). CGO off.
-- **charts/kubesentinel-ai/**: deployment·service·serviceaccount·rbac(read-only ClusterRole)·secret·NOTES. 모든 §4 엔드포인트를 values로 주입. 헬스 프로브는 `/healthz` 부재로 **tcpSocket** 사용(백로그 #6에서 httpGet 전환).
+- **helm/kubesentinel-ai/**: deployment·service·serviceaccount·rbac(read-only ClusterRole)·secret·NOTES. 모든 §4 엔드포인트를 values로 주입. 헬스 프로브는 `/healthz` 부재로 **tcpSocket** 사용(백로그 #6에서 httpGet 전환).
 - **deploy/argocd/application.yaml**: automated sync(prune+selfHeal), CreateNamespace, ServerSideApply.
 
 > **주의 — 아직 env로 주입되지 않는 values**: `ai.allowExternal`·`ai.redactSecrets`·`ai.providerType`·`gitops.*`·`collector.logLines`·`logLevel`은 values에 노출돼 있으나 `config.LoadConfig`가 읽지 않는다. config 파일 로딩 또는 env 매핑 확장이 필요(백로그 #3 및 config 항목).

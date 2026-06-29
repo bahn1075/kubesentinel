@@ -50,7 +50,7 @@ frontend-docker-push:
 
 ## Helm ------------------------------------------------------------
 helm-lint:
-	helm lint charts/kubesentinel-ai
+	helm lint helm/kubesentinel-ai
 
 helm-template:
-	helm template kubesentinel charts/kubesentinel-ai
+	helm template kubesentinel helm/kubesentinel-ai

@@ -142,9 +142,9 @@ docker compose logs -f notify-sink    # delivered notification
 
 ### 2. minikube (metallb)
 ```bash
-helm install kubesentinel charts/kubesentinel-ai -n kubesentinel --create-namespace \
-  -f charts/kubesentinel-ai/values.yaml \
-  -f charts/kubesentinel-ai/values/metallb.yaml
+helm install kubesentinel helm/kubesentinel-ai -n kubesentinel --create-namespace \
+  -f helm/kubesentinel-ai/values.yaml \
+  -f helm/kubesentinel-ai/values/metallb.yaml
 # dashboard
 kubectl -n kubesentinel port-forward svc/kubesentinel-kubesentinel-ai-frontend 8080:80
 #  → http://localhost:8080
@@ -198,7 +198,7 @@ A single `expose.mode` switches how the app is exposed (target = frontend; nginx
 | `metallb` | minikube/on-prem | Service `type=LoadBalancer` (metallb assigns IP) |
 | `tailscale` | OKE (tailscale operator) | Ingress (class=tailscale) → `<name>.<tailnet>.ts.net` HTTPS |
 
-Per-env overlays: `charts/kubesentinel-ai/values/{ingress,metallb,tailscale}.yaml`
+Per-env overlays: `helm/kubesentinel-ai/values/{ingress,metallb,tailscale}.yaml`
 
 ---
 
@@ -216,7 +216,7 @@ kubesentinel/
 │   ├── store/                  # PostgreSQL + goose migrations
 │   └── models/                 # domain models
 ├── frontend/                   # React+Vite dashboard (separate image)
-├── charts/kubesentinel-ai/     # Helm chart (+ values/ per-env overlays)
+├── helm/kubesentinel-ai/     # Helm chart (+ values/ per-env overlays)
 ├── deploy/                     # argocd Application · local mock stack
 ├── scripts/                    # docker build/push (multi-arch)
 ├── docker-compose.yml          # local integration test

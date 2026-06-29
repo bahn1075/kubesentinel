@@ -393,7 +393,7 @@ kubesentinel-ai/
     notifier/     discord.go slack.go teams.go webhook.go
     audit/        recorder.go
   ai/             prompt_templates/ schemas/ redactor
-  charts/kubesentinel-ai/      # Helm 배포 (values로 전 환경 대응)
+  helm/kubesentinel-ai/      # Helm 배포 (values로 전 환경 대응)
   deploy/crds/ deploy/samples/ # Phase B
   docs/           architecture.md threat-model.md policy.md runbook-format.md
   examples/scenarios/          crashloop/ oomkilled/ imagepullbackoff/ ...
