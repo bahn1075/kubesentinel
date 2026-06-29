@@ -16,7 +16,8 @@
 |---|---|---|---|
 | 진입점 / 컴포넌트 조립 | `cmd/kubesentinel-ai` | ✅ 동작 | env 기반 설정 로드 → 컴포넌트 주입 → webhook 서버 기동 |
 | 설정 | `internal/config` | ✅ 동작 (부분) | env 오버라이드 + 기본값. **YAML 파일 로딩은 태그만 있고 미구현** |
-| Signal Collector — 진입 | `internal/collector` (webhook.go) | ✅ 동작 | `/v1/alerts` Alertmanager webhook 수신 → 비동기 처리 |
+| Signal Collector — 진입(push) | `internal/collector` (webhook.go) | ✅ 동작 | `/v1/alerts` Alertmanager webhook 수신 → 비동기 처리 |
+| Signal Collector — 진입(pull) | `internal/collector` (alertmanager_poller.go) | ✅ 동작 | **Alertmanager v2 API 폴링**. Settings의 Alertmanager URL 설정 시 활성. fingerprint 중복제거, warning/critical만. **prometheus 설정 변경 불필요** |
 | Signal Collector — 보강 | `internal/collector` (prometheus/loki/enrich) | ✅ 동작 | Prom instant 쿼리 + Loki 로그. **best-effort(실패해도 흐름 진행)** |
 | Signal Collector — K8s | — | ❌ 미구현 | Events·워크로드 manifest 스냅샷. client-go 의존성 필요 |
 | 도메인 모델 | `internal/models` | ✅ 동작 | EvidenceBundle / DiagnosisResult / AlertmanagerPayload / AIClient |
@@ -27,13 +28,14 @@
 | Policy & Safety | `internal/policy` (빈 디렉토리) | ❌ 미구현 | architecture §4.6, §9 |
 | GitOps Executor | `internal/gitops` (빈 디렉토리) | ❌ 미구현 | architecture §4.5 — MVP-1 핵심 |
 | Audit | `internal/audit` (빈 디렉토리) | ❌ 미구현 | |
-| Helm chart / Dockerfile | — | ❌ 미구현 | architecture §12 |
 | 테스트 | `*_test.go` | ✅ 부분 | models / provider / notifier 단위 테스트 존재. collector·engine 미커버 |
 | Dockerfile / Helm / ArgoCD | `Dockerfile`, `helm/`, `deploy/argocd/` | ✅ 동작 | multi-arch 이미지 + Helm 차트 + ArgoCD Application. `helm lint`·`docker build` 검증됨 |
 | Frontend (dashboard) | `frontend/` | ✅ 동작 | React+Vite+TS. **Settings·Incidents 백엔드 API(DB) 연동**, policies/approvals는 아직 mock. nginx가 `/api`→백엔드 프록시. Helm `frontend.enabled` |
-| 설정 영속화 (Settings) | `internal/store`, `/api/settings` | ✅ 동작 | Postgres + goose 임베드 마이그레이션(v2). 비민감 설정만 저장(민감정보는 Secret/env). 기동 시 cfg에 병합되어 파이프라인이 소비(§3.6). 재시작·Pod 재생성 후 영속 검증됨 |
-| 인시던트 영속화 (Incidents) | `internal/store`, `/api/incidents` | ✅ 동작 | webhook 처리 시 `incidents` 테이블 저장 → `GET /api/incidents[/{id}]`로 대시보드 조회. camelCase 뷰가 프론트 타입과 정합 |
-| Postgres | `helm/.../postgres.yaml`, compose | ✅ 동작 | 차트 `postgres.enabled`(로컬/테스트) 또는 `database.url`(외부 DB). PVC 영속 |
+| 설정 영속화 (Settings) | `internal/store`, `/api/settings` | ✅ 동작 | Postgres + goose 임베드 마이그레이션(**v3**). 비민감 설정(AI kind/provider/authMethod, Collector prom/loki/**alertmanager**, Notifier, Git). 기동 시 cfg 병합 후 파이프라인 소비(§3.6) |
+| 시크릿 (write-only) | `internal/store`, `/api/secrets` | ✅ 동작 | `app_secrets` 테이블(마이그 00003). AI API key·git token을 **write-only**(GET은 설정 여부만). 기동 시 cfg 주입 |
+| 인시던트 영속화 (Incidents) | `internal/store`, `/api/incidents` | ✅ 동작 | webhook·폴러 처리 시 `incidents` 테이블 저장 → `GET /api/incidents[/{id}]` 대시보드 조회 |
+| Postgres | `helm/.../postgres.yaml`, compose | ✅ 동작 | 차트 `postgres.enabled`(로컬/테스트) 또는 `database.existingSecret`/`url`(외부 DB). oke는 기존 postgresql 연결 |
+| 멀티환경 노출 | `helm/.../values/{ingress,metallb,tailscale}.yaml` | ✅ 동작 | `expose.mode`로 ingress-nginx/metallb/tailscale 전환. minikube·oke 배포 검증됨 |
 
 범례: ✅ 동작 · [~]/부분 · ❌ 미구현
 
@@ -110,6 +112,13 @@ notifier.NotifyDiagnosis(bundle, result)  # Discord/Slack/Teams
 - **수신은 즉시 200**, 분석은 goroutine. (Alertmanager 재전송 방지) — 단, 현재 **동시성 제한·중복 억제(cooldown) 없음** → §6 백로그.
 - **보강 실패는 무시**하고 진단을 진행한다(엔드포인트 미설정/장애 내성).
 
+### 3-1. 진입 방식 2가지 (push / pull)
+1. **push (webhook)** — Alertmanager가 `/v1/alerts`로 전송. receiver 설정 필요(또는 AlertmanagerConfig).
+2. **pull (폴링)** — Settings의 **Alertmanager URL** 설정 시, 백엔드가 `GET {url}/api/v2/alerts`를 주기(기본 30s) 폴링. **prometheus/alertmanager 설정 변경 불필요**, 전 네임스페이스 alert 수신.
+   - fingerprint로 중복제거, `warning|critical`만, Watchdog/info 제외, resolved 시 추적 해제(재발화 재처리).
+   - 두 경로 모두 동일한 `processBundle()`(보강→분석→영속화→알림)을 거친다.
+   - ⚠️ 같은 날·같은 alertname은 `incident_id`(=`inc-<날짜>-<alertname>`) 동일 → 한 인시던트로 upsert(인스턴스별 분리하려면 incident_id에 fingerprint 포함 필요).
+
 ---
 
 ## 4. 설정 레퍼런스
@@ -123,6 +132,7 @@ notifier.NotifyDiagnosis(bundle, result)  # Discord/Slack/Teams
 | `KUBESENTINEL_AI_API_KEY` | AI.APIKey | — | 엔드포인트에 따라 |
 | `KUBESENTINEL_AI_PROMETHEUS_URL` | Collector.PrometheusURL | — | 미설정 시 metric 보강 skip |
 | `KUBESENTINEL_AI_LOKI_URL` | Collector.LokiURL | — | 미설정 시 log 보강 skip |
+| `KUBESENTINEL_AI_ALERTMANAGER_URL` | Collector.AlertmanagerURL | — | **설정 시 Alertmanager 폴링(pull) 활성화**. 보통 Settings(DB)로 주입 |
 | `KUBESENTINEL_AI_GRAFANA_URL` | Collector.GrafanaURL | — | 알림 딥링크용(선택) |
 | `KUBESENTINEL_AI_NOTIFIER_TYPE` | Notifier.Type | `slack`로 해석 | `discord`/`slack`/`teams` |
 | `KUBESENTINEL_AI_NOTIFIER_WEBHOOK` | Notifier.Webhook | — | 미설정 시 noop(알림 안 감) |

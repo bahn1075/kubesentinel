@@ -58,7 +58,7 @@ Alertmanager ──(webhook /v1/alerts)──▶ ① Signal Collector
                                        ⑤ (MVP-1) Policy → GitOps PR → approval → Argo CD sync → verify
 ```
 
-1. **Collect** — When Alertmanager posts an alert to the webhook (`/v1/alerts`), KubeSentinel identifies the target workload/namespace and enriches an `EvidenceBundle` with Prometheus metrics and Loki logs. (Skipped automatically if the sources are not configured.)
+1. **Collect** — On receiving an alert, KubeSentinel identifies the target workload/namespace and enriches an `EvidenceBundle` with Prometheus metrics and Loki logs (skipped if not configured). Two intake modes: **push** (Alertmanager posts to `/v1/alerts`) or **pull** (polls `GET /api/v2/alerts` using the Alertmanager URL from Settings — **no Prometheus/Alertmanager config changes**).
 2. **Diagnose** — The EvidenceBundle is sent to an OpenAI-compatible LLM to produce a **structured RCA** (root cause, summary, confidence, proposed actions). A tolerant parser handles minor schema drift in model output.
 3. **Persist** — The incident is stored in PostgreSQL for dashboard retrieval.
 4. **Notify** — The result is pushed to a notification channel (proposed actions are labeled "suggestions only — apply after policy/approval").
@@ -108,7 +108,8 @@ Design details: [`docs/architecture.md`](docs/architecture.md) · Implementation
 
 | Feature | Status |
 |---|---|
-| Alertmanager webhook → RCA → notify (MVP-0) | ✅ |
+| Alertmanager webhook (push) → RCA → notify (MVP-0) | ✅ |
+| Alertmanager API polling (pull) — no Prometheus config changes | ✅ |
 | Prometheus/Loki evidence enrichment (best-effort) | ✅ |
 | OpenAI-compatible LLM diagnosis (local/frontier) + model discovery | ✅ |
 | Incident persistence in PostgreSQL + dashboard | ✅ |
