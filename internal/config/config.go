@@ -24,10 +24,12 @@ type DatabaseConfig struct {
 // CollectorConfig는 근거 수집(Signal Collector) 엔드포인트 설정입니다. (architecture.md §4.1)
 // 모든 주소는 값으로 주입하며 코드에 하드코딩하지 않는다. (§2 설계 원칙)
 type CollectorConfig struct {
-	PrometheusURL string `yaml:"prometheus_url"` // e.g., http://prometheus.monitoring.svc:9090
-	LokiURL       string `yaml:"loki_url"`       // e.g., http://loki.monitoring.svc:3100
-	GrafanaURL    string `yaml:"grafana_url"`    // 알림 딥링크용 (선택)
-	LogLines      int    `yaml:"log_lines"`      // Loki에서 가져올 최근 로그 라인 수
+	PrometheusURL   string `yaml:"prometheus_url"`    // e.g., http://prometheus.monitoring.svc:9090
+	LokiURL         string `yaml:"loki_url"`          // e.g., http://loki.monitoring.svc:3100
+	AlertmanagerURL string `yaml:"alertmanager_url"`  // e.g., http://alertmanager.monitoring.svc:9093 — 설정 시 폴링 활성화
+	GrafanaURL      string `yaml:"grafana_url"`       // 알림 딥링크용 (선택)
+	LogLines        int    `yaml:"log_lines"`         // Loki에서 가져올 최근 로그 라인 수
+	PollIntervalSec int    `yaml:"poll_interval_sec"` // Alertmanager 폴링 주기(초)
 }
 
 // AppConfig는 애플리케이션 자체의 기본 설정을 담습니다.
@@ -77,7 +79,8 @@ func LoadConfig() (*Config, error) {
 			RedactSecrets:  true,
 		},
 		Collector: CollectorConfig{
-			LogLines: 50,
+			LogLines:        50,
+			PollIntervalSec: 30,
 		},
 		GitOps: GitOpsConfig{
 			BaseBranch:   "main",
@@ -109,6 +112,9 @@ func LoadConfig() (*Config, error) {
 	}
 	if val := os.Getenv("KUBESENTINEL_AI_LOKI_URL"); val != "" {
 		cfg.Collector.LokiURL = val
+	}
+	if val := os.Getenv("KUBESENTINEL_AI_ALERTMANAGER_URL"); val != "" {
+		cfg.Collector.AlertmanagerURL = val
 	}
 	if val := os.Getenv("KUBESENTINEL_AI_GRAFANA_URL"); val != "" {
 		cfg.Collector.GrafanaURL = val

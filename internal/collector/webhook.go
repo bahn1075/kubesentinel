@@ -19,6 +19,10 @@ type WebhookServer struct {
 	Notifier notifier.Notifier
 	Store    *store.Store    // 설정 영속화 (nil이면 /api/settings 비활성)
 	AI       config.AIConfig // 현재 활성(병합된) AI 설정 — 상태/health 표시용
+
+	// Alertmanager 폴링 (pull) — URL 설정 시에만 활성
+	AlertmanagerURL string
+	PollIntervalSec int
 }
 
 // NewWebhookServer는 새로운 WebhookServer 인스턴스를 생성합니다.
@@ -69,46 +73,8 @@ func (s *WebhookServer) handleAlertmanagerWebhook(w http.ResponseWriter, r *http
 		return
 	}
 
-	// 2. 근거 보강 → AI 분석 → 알림 (비동기 실행)
-	go func(b *models.EvidenceBundle) {
-		fmt.Printf("\n[KubeSentinel] 🔍 Analyzing Incident: %s\n", b.IncidentID)
-
-		// 2-1. Prometheus/Loki로 EvidenceBundle 보강 (best-effort)
-		if s.Enricher != nil {
-			s.Enricher.Enrich(b)
-		}
-
-		// 2-2. AI RCA 분석
-		result, err := s.Engine.Analyze(b)
-		state := "DiagnosisCompleted"
-		if err != nil {
-			fmt.Printf("[KubeSentinel] ❌ Analysis Failed: %v\n", err)
-			state = "ValidationFailed"
-			result = nil
-		} else {
-			fmt.Printf("[KubeSentinel] ✅ Analysis Complete!\n")
-			fmt.Printf("  - Root Cause: %s\n", result.RootCause)
-			fmt.Printf("  - Summary: %s\n", result.Summary)
-			if len(result.ProposedActions) > 0 {
-				fmt.Printf("  - Proposed Actions: %d\n", len(result.ProposedActions))
-			}
-		}
-
-		// 2-3. 인시던트 영속화 (DB, 대시보드 조회용)
-		if s.Store != nil {
-			view := models.NewIncidentView(b, result, state)
-			if e := s.Store.SaveIncident(view); e != nil {
-				fmt.Printf("[KubeSentinel] ⚠️  Save Incident Failed: %v\n", e)
-			}
-		}
-
-		// 2-4. 알림 채널 전송 (분석 성공 시) — MVP-0: 읽기 전용 RCA + 알림
-		if result != nil && s.Notifier != nil {
-			if err := s.Notifier.NotifyDiagnosis(b, result); err != nil {
-				fmt.Printf("[KubeSentinel] ⚠️  Notification Failed: %v\n", err)
-			}
-		}
-	}(bundle)
+	// 2. 근거 보강 → AI 분석 → 영속화 → 알림 (비동기 실행). webhook·폴러 공용 경로.
+	go s.processBundle(bundle)
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))

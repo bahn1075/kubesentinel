@@ -74,6 +74,14 @@ func main() {
 		}
 	}()
 
+	// 4-1. Alertmanager 폴링 (pull). URL 설정 시에만 활성. (prometheus 설정 변경 불필요)
+	if cfg.Collector.AlertmanagerURL != "" {
+		server.AlertmanagerURL = cfg.Collector.AlertmanagerURL
+		server.PollIntervalSec = cfg.Collector.PollIntervalSec
+		go server.StartAlertmanagerPoller()
+		fmt.Printf("Alertmanager polling enabled: %s (every %ds)\n", cfg.Collector.AlertmanagerURL, cfg.Collector.PollIntervalSec)
+	}
+
 	fmt.Println("KubeSentinel AI is now running. Press Ctrl+C to exit.")
 	select {}
 }
@@ -98,6 +106,9 @@ func applyDBSettings(cfg *config.Config, s models.AppSettings) {
 	}
 	if s.Collector.LokiURL != "" {
 		cfg.Collector.LokiURL = s.Collector.LokiURL
+	}
+	if s.Collector.AlertmanagerURL != "" {
+		cfg.Collector.AlertmanagerURL = s.Collector.AlertmanagerURL
 	}
 	if s.Collector.GrafanaURL != "" {
 		cfg.Collector.GrafanaURL = s.Collector.GrafanaURL
