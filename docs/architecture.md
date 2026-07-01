@@ -189,6 +189,12 @@ spec:
 3. **LLM Analyzer** — evidence 요약 → root cause 후보 → 수정안 후보 → 영향 설명 → 검증 계획 (structured JSON 출력)
 4. **Runbook RAG** — (MVP 이후) 매니페스트 repo 내 markdown runbook + metadata. CNCF HolmesGPT 사례처럼 모델보다 runbook 품질이 조사 결과를 좌우한다.
 
+> **구현 현황 — 심층분석(L1/L2/L3):** 단발 LLM 추측을 근거 기반 분석으로 강화했다.
+> - **L1 상관분석 + 신뢰도 게이팅**: 동시 발생 alert(`related_alerts`)를 컨텍스트로 상관 추론, 근거 빈약 시 confidence↓ + 조사용 제안(코드 계산 `evidenceQuality` 뱃지).
+> - **L2 client-go 근거 수집**: 대상 리소스의 Kubernetes Events·상태·노드 상태를 read-only로 수집(§4.1의 Events/manifest 항목 구현).
+> - **L3 agentic 도구 루프 + 검증**: LLM이 read-only 도구(Prom/Loki/K8s events·pods)를 스스로 요청→조회→재분석(프롬프트 기반 JSON 프로토콜, 로컬 모델 호환) 후 검증 패스로 자기 진단 비판·보정.
+> Rule Analyzer(1)·Runbook RAG(4)는 여전히 미구현. 상세: `implementation-status.md §3-2`.
+
 ### 4.4 Remediation Planner
 
 개념 3.4의 `RemediationPlan` 스키마 사용(target / diagnosis / proposedChanges / risk / execution). 조치 유형별 기본 정책:

@@ -58,7 +58,7 @@ Alertmanager ──(webhook /v1/alerts)──▶ ① Signal Collector
 ```
 
 1. **수집** — alert를 받으면 대상 워크로드/네임스페이스를 식별하고 Prometheus 메트릭·Loki 로그로 근거(EvidenceBundle)를 보강한다(미설정 시 자동 skip). 진입은 **2가지**: **push**(Alertmanager가 `/v1/alerts`로 전송) 또는 **pull**(Settings의 Alertmanager URL로 `GET /api/v2/alerts` 주기 폴링 — **Prometheus/Alertmanager 설정 무변경**).
-2. **진단** — EvidenceBundle을 OpenAI 호환 LLM에 보내 **구조화된 RCA**(근본 원인·요약·신뢰도·제안 조치 목록)를 얻는다. 응답 형식이 흔들려도 견디는 관대한 파서를 사용한다.
+2. **진단(심층분석)** — EvidenceBundle을 OpenAI 호환 LLM에 보내 **구조화된 RCA**(근본 원인·요약·신뢰도·제안 조치)를 얻는다. 단발 추측이 아니라: **동시 발생 alert 상관분석 + 근거 빈약 시 신뢰도 게이팅(L1)**, **client-go로 Events·리소스·노드 상태 수집(L2)**, **LLM이 read-only 도구로 근거를 스스로 수집→재분석 + 검증 패스(L3)** 를 거친다. (관대한 파서로 로컬 모델 응답도 견딤)
 3. **영속화** — 인시던트를 PostgreSQL에 저장해 대시보드에서 조회한다.
 4. **알림** — 진단 결과를 알림 채널로 전송(제안 조치는 "제안일 뿐, 적용은 정책·승인 후").
 5. **조치(예정)** — 정책 범위 안에서 GitOps PR을 생성하고 승인 후 Argo CD가 반영, metric/log로 검증.
@@ -111,6 +111,7 @@ Alertmanager ──(webhook /v1/alerts)──▶ ① Signal Collector
 | Alertmanager API 폴링(pull) — Prometheus 설정 무변경 | ✅ |
 | Prometheus/Loki 근거 보강 (best-effort) | ✅ |
 | OpenAI 호환 LLM 진단 (로컬/프론티어) + 모델 조회 | ✅ |
+| 심층분석: 상관분석·신뢰도 게이팅(L1) · client-go 근거 수집(L2) · agentic 도구 루프+검증(L3) | ✅ |
 | 인시던트 PostgreSQL 영속화 + 대시보드 조회 | ✅ |
 | 설정 DB화 (프론트 입력 → DB → 기동 시 로드) | ✅ |
 | 민감정보 write-only 시크릿 | ✅ |

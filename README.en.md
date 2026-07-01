@@ -59,7 +59,7 @@ Alertmanager ──(webhook /v1/alerts)──▶ ① Signal Collector
 ```
 
 1. **Collect** — On receiving an alert, KubeSentinel identifies the target workload/namespace and enriches an `EvidenceBundle` with Prometheus metrics and Loki logs (skipped if not configured). Two intake modes: **push** (Alertmanager posts to `/v1/alerts`) or **pull** (polls `GET /api/v2/alerts` using the Alertmanager URL from Settings — **no Prometheus/Alertmanager config changes**).
-2. **Diagnose** — The EvidenceBundle is sent to an OpenAI-compatible LLM to produce a **structured RCA** (root cause, summary, confidence, proposed actions). A tolerant parser handles minor schema drift in model output.
+2. **Diagnose (deep analysis)** — The EvidenceBundle is sent to an OpenAI-compatible LLM for a **structured RCA** (root cause, summary, confidence, proposed actions). Not a single guess: it applies **correlation of co-firing alerts + confidence gating when evidence is thin (L1)**, **client-go collection of Events/resource/node status (L2)**, and **an agentic loop where the LLM requests read-only tools → re-analyzes + a verification pass (L3)**. (A tolerant parser handles local-model output drift.)
 3. **Persist** — The incident is stored in PostgreSQL for dashboard retrieval.
 4. **Notify** — The result is pushed to a notification channel (proposed actions are labeled "suggestions only — apply after policy/approval").
 5. **Remediate (planned)** — Within policy scope, open a GitOps PR; after approval Argo CD reconciles it and the outcome is verified via metrics/logs.
@@ -112,6 +112,7 @@ Design details: [`docs/architecture.md`](docs/architecture.md) · Implementation
 | Alertmanager API polling (pull) — no Prometheus config changes | ✅ |
 | Prometheus/Loki evidence enrichment (best-effort) | ✅ |
 | OpenAI-compatible LLM diagnosis (local/frontier) + model discovery | ✅ |
+| Deep analysis: correlation & confidence gating (L1) · client-go evidence (L2) · agentic tool loop + verify (L3) | ✅ |
 | Incident persistence in PostgreSQL + dashboard | ✅ |
 | DB-backed settings (frontend → DB → load on startup) | ✅ |
 | Write-only secrets | ✅ |
