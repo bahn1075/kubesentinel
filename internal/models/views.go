@@ -28,11 +28,12 @@ type DiagnosisView struct {
 }
 
 type EvidenceView struct {
-	Metrics       []map[string]interface{} `json:"metrics"`
-	Logs          []string                 `json:"logs"`
-	Events        []string                 `json:"events"`
-	GitContext    *GitContextView          `json:"gitContext,omitempty"`
-	RelatedAlerts []RelatedAlert           `json:"relatedAlerts,omitempty"`
+	Metrics        []map[string]interface{} `json:"metrics"`
+	Logs           []string                 `json:"logs"`
+	Events         []string                 `json:"events"`
+	ResourceStatus map[string]interface{}   `json:"resourceStatus,omitempty"`
+	GitContext     *GitContextView          `json:"gitContext,omitempty"`
+	RelatedAlerts  []RelatedAlert           `json:"relatedAlerts,omitempty"`
 }
 
 type GitContextView struct {
@@ -58,6 +59,9 @@ func NewIncidentView(b *EvidenceBundle, d *DiagnosisResult, state string) Incide
 			Events:        b.Events,
 			RelatedAlerts: b.RelatedAlerts,
 		},
+	}
+	if len(b.ResourceYAML) > 0 {
+		v.Evidence.ResourceStatus = b.ResourceYAML
 	}
 	if b.GitContext.Repo != "" || b.GitContext.Path != "" {
 		v.Evidence.GitContext = &GitContextView{

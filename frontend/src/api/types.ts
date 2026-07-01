@@ -52,6 +52,7 @@ export interface EvidenceBundle {
   metrics: { name: string; query: string; samples: unknown[] }[];
   logs: string[];
   events: string[];
+  resourceStatus?: Record<string, unknown>;
   gitContext?: { repo: string; path: string; lastCommit: string };
   relatedAlerts?: RelatedAlert[];
 }

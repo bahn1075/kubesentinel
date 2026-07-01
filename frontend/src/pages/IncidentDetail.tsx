@@ -104,9 +104,15 @@ export default function IncidentDetail() {
           {inc.evidence.gitContext && (
             <p className="mono muted">git: {inc.evidence.gitContext.repo}/{inc.evidence.gitContext.path} @ {inc.evidence.gitContext.lastCommit}</p>
           )}
+          {inc.evidence.resourceStatus && Object.keys(inc.evidence.resourceStatus).length > 0 && (
+            <>
+              <p className="k muted" style={{ margin: "10px 0 4px" }}>Resource Status (K8s API)</p>
+              <div className="logs mono">{JSON.stringify(inc.evidence.resourceStatus)}</div>
+            </>
+          )}
           {inc.evidence.events.length > 0 && (
             <>
-              <p className="k muted" style={{ margin: "10px 0 4px" }}>Events</p>
+              <p className="k muted" style={{ margin: "10px 0 4px" }}>Events (K8s)</p>
               <div className="logs">{inc.evidence.events.map((e, i) => <div key={i}>• {e}</div>)}</div>
             </>
           )}
