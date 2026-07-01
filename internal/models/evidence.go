@@ -21,6 +21,16 @@ type EvidenceBundle struct {
 	Events       []string                 `json:"events"`
 	ResourceYAML map[string]interface{}   `json:"resource_yaml"`
 	GitContext   GitContext               `json:"git_context"`
+	// 동시에 firing 중인 다른 alert들 (상관 분석용 컨텍스트). LLM에 함께 전달된다.
+	RelatedAlerts []RelatedAlert `json:"related_alerts,omitempty"`
+}
+
+// RelatedAlert는 상관 분석을 위한 동시 발생 alert의 요약입니다.
+type RelatedAlert struct {
+	Alertname string `json:"alertname"`
+	Namespace string `json:"namespace"`
+	Severity  string `json:"severity"`
+	Summary   string `json:"summary"`
 }
 
 // GitContext는 대상 워크로드의 git 매니페스트 컨텍스트입니다.

@@ -3,6 +3,14 @@ import { fetchIncident } from "../api/client";
 import { useAsync } from "../lib/useAsync";
 import { STATE_FLOW, severityClass, stateClass, riskClass, formatTime, isFailureState } from "../lib/format";
 
+// 근거 품질 뱃지 (백엔드가 코드로 계산한 값)
+function evidenceBadge(q?: string) {
+  if (!q) return null;
+  if (q === "rich") return <span className="badge ok">근거 충분</span>;
+  if (q === "partial") return <span className="badge warn">근거 부분</span>;
+  return <span className="badge crit">근거 부족 · 조사용</span>; // none
+}
+
 export default function IncidentDetail() {
   const { id = "" } = useParams();
   const { data: inc, loading } = useAsync(() => fetchIncident(id), [id]);
@@ -47,8 +55,14 @@ export default function IncidentDetail() {
             <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span className="confidence-bar"><div style={{ width: `${inc.diagnosis.confidence * 100}%` }} /></span>
               {Math.round(inc.diagnosis.confidence * 100)}%
+              {evidenceBadge(inc.diagnosis.evidenceQuality)}
             </span>
           </div>
+          {inc.diagnosis.evidenceQuality && inc.diagnosis.evidenceQuality !== "rich" && (
+            <p className="muted" style={{ fontSize: 12, marginTop: -6, marginBottom: 12 }}>
+              ⚠️ 근거(metric/log/event)가 제한적이라 <b>조사용 진단</b>입니다. 아래 "동시 발생 alert"와 함께 검토하세요.
+            </p>
+          )}
 
           <h3>제안 조치 <span className="tag">AI는 제안만, 적용은 정책·승인 후</span></h3>
           <ul className="actions-list">
@@ -77,6 +91,16 @@ export default function IncidentDetail() {
       {inc.evidence && (
         <div className="section">
           <h3>근거 (Evidence)</h3>
+          {inc.evidence.relatedAlerts && inc.evidence.relatedAlerts.length > 0 && (
+            <>
+              <p className="k muted" style={{ margin: "0 0 4px" }}>동시 발생 alert (상관 분석 입력)</p>
+              <div className="logs">
+                {inc.evidence.relatedAlerts.map((a, i) => (
+                  <div key={i}>• <code>{a.alertname}</code>{a.namespace ? ` (${a.namespace})` : ""}{a.severity ? ` · ${a.severity}` : ""}{a.summary ? ` — ${a.summary}` : ""}</div>
+                ))}
+              </div>
+            </>
+          )}
           {inc.evidence.gitContext && (
             <p className="mono muted">git: {inc.evidence.gitContext.repo}/{inc.evidence.gitContext.path} @ {inc.evidence.gitContext.lastCommit}</p>
           )}

@@ -31,7 +31,10 @@ func (e *Engine) Analyze(bundle *models.EvidenceBundle) (*models.DiagnosisResult
 		`  "confidence": 0.0,` + "  // number between 0 and 1\n" +
 		`  "proposed_actions": [ { "type": "git_pr|rollback|runtime_patch|suggestion", "description": "<text>", "target": "<resource or file path>", "risk": "low|medium|high" } ]` + "\n" +
 		"}\n" +
-		"IMPORTANT: 'root_cause' and 'summary' MUST be plain strings (never nested objects). Output valid JSON only."
+		"IMPORTANT: 'root_cause' and 'summary' MUST be plain strings (never nested objects). Output valid JSON only.\n" +
+		"\nDEEP ANALYSIS RULES:\n" +
+		"1) CORRELATION: The context field 'related_alerts' lists OTHER alerts firing at the same time. You MUST correlate them. The true root cause may originate from a different alert/resource than this one (e.g., a failing CronJob/Job or a node problem can make control-plane targets look 'Down'). If a related alert better explains the situation, say so explicitly.\n" +
+		"2) CONFIDENCE GATING: If 'metrics', 'logs', and 'events' are all empty, you are inferring from the alert name alone. In that case set confidence <= 0.4, phrase root_cause as a hypothesis (not a certainty), state the uncertainty and what evidence is missing in the summary, and make proposed_actions INVESTIGATION steps (type='suggestion', risk='low') — do NOT propose specific fixes (git_pr/rollback/runtime_patch) without evidence."
 
 	contextBytes, err := json.MarshalIndent(bundle, "", "  ")
 	if err != nil {

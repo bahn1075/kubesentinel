@@ -38,6 +38,14 @@ export interface DiagnosisResult {
   summary: string;
   confidence: number; // 0..1
   proposedActions: ProposedAction[];
+  evidenceQuality?: string; // none | partial | rich (코드 계산)
+}
+
+export interface RelatedAlert {
+  alertname: string;
+  namespace: string;
+  severity: string;
+  summary: string;
 }
 
 export interface EvidenceBundle {
@@ -45,6 +53,7 @@ export interface EvidenceBundle {
   logs: string[];
   events: string[];
   gitContext?: { repo: string; path: string; lastCommit: string };
+  relatedAlerts?: RelatedAlert[];
 }
 
 export interface Incident {

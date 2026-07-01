@@ -23,13 +23,16 @@ type DiagnosisView struct {
 	Summary         string           `json:"summary"`
 	Confidence      float64          `json:"confidence"`
 	ProposedActions []ProposedAction `json:"proposedActions"`
+	// none|partial|rich — 코드로 계산한 근거 품질(LLM 자기신고 아님).
+	EvidenceQuality string `json:"evidenceQuality,omitempty"`
 }
 
 type EvidenceView struct {
-	Metrics    []map[string]interface{} `json:"metrics"`
-	Logs       []string                 `json:"logs"`
-	Events     []string                 `json:"events"`
-	GitContext *GitContextView          `json:"gitContext,omitempty"`
+	Metrics       []map[string]interface{} `json:"metrics"`
+	Logs          []string                 `json:"logs"`
+	Events        []string                 `json:"events"`
+	GitContext    *GitContextView          `json:"gitContext,omitempty"`
+	RelatedAlerts []RelatedAlert           `json:"relatedAlerts,omitempty"`
 }
 
 type GitContextView struct {
@@ -50,9 +53,10 @@ func NewIncidentView(b *EvidenceBundle, d *DiagnosisResult, state string) Incide
 		State:      state,
 		CreatedAt:  time.Now().UTC(),
 		Evidence: &EvidenceView{
-			Metrics: b.Metrics,
-			Logs:    b.Logs,
-			Events:  b.Events,
+			Metrics:       b.Metrics,
+			Logs:          b.Logs,
+			Events:        b.Events,
+			RelatedAlerts: b.RelatedAlerts,
 		},
 	}
 	if b.GitContext.Repo != "" || b.GitContext.Path != "" {
@@ -68,7 +72,27 @@ func NewIncidentView(b *EvidenceBundle, d *DiagnosisResult, state string) Incide
 			Summary:         d.Summary,
 			Confidence:      d.Confidence,
 			ProposedActions: d.ProposedActions,
+			EvidenceQuality: evidenceQuality(b),
 		}
 	}
 	return v
+}
+
+// evidenceQuality는 수집된 근거의 충실도를 코드로 판정한다(LLM에 의존하지 않음).
+//
+//	none    — metric·log·event 모두 없음(alert 이름만으로 진단 = 조사용)
+//	partial — 일부만 존재
+//	rich    — metric과 log 모두 존재
+func evidenceQuality(b *EvidenceBundle) string {
+	m := len(b.Metrics) > 0
+	l := len(b.Logs) > 0
+	e := len(b.Events) > 0
+	switch {
+	case m && l:
+		return "rich"
+	case m || l || e:
+		return "partial"
+	default:
+		return "none"
+	}
 }

@@ -72,6 +72,10 @@ func (s *WebhookServer) handleAlertmanagerWebhook(w http.ResponseWriter, r *http
 		http.Error(w, "Failed to create evidence bundle", http.StatusBadRequest)
 		return
 	}
+	// 상관 컨텍스트: 같은 알림 그룹의 나머지 alert (webhook은 그룹 범위로 제한됨)
+	if len(payload.Alerts) > 1 {
+		bundle.RelatedAlerts = relatedFromAlerts(payload.Alerts[1:])
+	}
 
 	// 2. 근거 보강 → AI 분석 → 영속화 → 알림 (비동기 실행). webhook·폴러 공용 경로.
 	go s.processBundle(bundle)

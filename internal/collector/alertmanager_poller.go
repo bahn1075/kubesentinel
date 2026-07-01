@@ -103,6 +103,7 @@ func (s *WebhookServer) StartAlertmanagerPoller() {
 				}},
 			})
 			if bundle != nil {
+				bundle.RelatedAlerts = relatedFromV2(alerts, a.Fingerprint)
 				go s.processBundle(bundle)
 			}
 		}
@@ -114,6 +115,37 @@ func (s *WebhookServer) StartAlertmanagerPoller() {
 		}
 		<-ticker.C
 	}
+}
+
+// relatedFromV2는 자신(selfFingerprint)을 제외한 동시 발생 alert들을 상관 컨텍스트로 매핑한다.
+func relatedFromV2(alerts []amV2Alert, selfFingerprint string) []models.RelatedAlert {
+	out := make([]models.RelatedAlert, 0, len(alerts))
+	for _, a := range alerts {
+		if a.Fingerprint == selfFingerprint {
+			continue
+		}
+		out = append(out, models.RelatedAlert{
+			Alertname: a.Labels["alertname"],
+			Namespace: a.Labels["namespace"],
+			Severity:  a.Labels["severity"],
+			Summary:   a.Annotations["summary"],
+		})
+	}
+	return out
+}
+
+// relatedFromAlerts는 webhook 페이로드의 alert 슬라이스를 상관 컨텍스트로 매핑한다.
+func relatedFromAlerts(alerts []models.Alert) []models.RelatedAlert {
+	out := make([]models.RelatedAlert, 0, len(alerts))
+	for _, a := range alerts {
+		out = append(out, models.RelatedAlert{
+			Alertname: a.Labels["alertname"],
+			Namespace: a.Labels["namespace"],
+			Severity:  a.Labels["severity"],
+			Summary:   a.Annotations["summary"],
+		})
+	}
+	return out
 }
 
 // fetchActiveAlerts는 Alertmanager v2 API에서 활성 alert 목록을 가져옵니다.
