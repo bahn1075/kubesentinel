@@ -22,7 +22,7 @@
 | Signal Collector — K8s | `internal/collector` (kube.go) | ✅ 동작 | **client-go(in-cluster)로 Events·리소스 상태·노드 상태 수집**(종류별 분기). read-only RBAC. best-effort |
 | 도메인 모델 | `internal/models` | ✅ 동작 | EvidenceBundle / DiagnosisResult / AlertmanagerPayload / AIClient |
 | AI Gateway | `internal/provider` | ✅ 동작 | OpenAI 호환 `/chat/completions`, 단발+**다중턴(ChatMessages)**. fallback·토큰제한·redact 미구현 |
-| Diagnosis Engine | `internal/diagnosis` | ✅ 동작 (심층분석) | **L1 상관분석+신뢰도 게이팅 · L2 client-go 근거 · L3 agentic 도구 루프+검증 패스**. tools 없으면 단발+검증 fallback. Rule/RAG 분석기는 미구현 |
+| Diagnosis Engine | `internal/diagnosis` | ✅ 동작 (심층분석) | **Rule Analyzer(결정론적 분류) · L1 상관분석+신뢰도 게이팅 · L2 client-go 근거 · L3 agentic 도구 루프+검증 패스**. tools 없으면 단발+검증 fallback. Runbook RAG는 미구현 |
 | Notifier | `internal/notifier` | ✅ 동작 | Discord/Slack/Teams webhook. 단방향 알림만(승인 액션 없음) |
 | Remediation Planner | — | ❌ 미구현 | architecture §4.4 |
 | Policy & Safety | `internal/policy` (빈 디렉토리) | ❌ 미구현 | architecture §4.6, §9 |
@@ -119,8 +119,9 @@ notifier.NotifyDiagnosis(bundle, result)  # Discord/Slack/Teams
    - 두 경로 모두 동일한 `processBundle()`(보강→분석→영속화→알림)을 거친다.
    - ⚠️ 같은 날·같은 alertname은 `incident_id`(=`inc-<날짜>-<alertname>`) 동일 → 한 인시던트로 upsert(인스턴스별 분리하려면 incident_id에 fingerprint 포함 필요).
 
-### 3-2. 심층분석 파이프라인 (L1 / L2 / L3)
+### 3-2. 심층분석 파이프라인 (Rule / L1 / L2 / L3)
 단발 LLM 추측 → 근거 기반 심층분석으로 개선. `internal/diagnosis/engine.go`.
+- **Rule Analyzer**(`models.ClassifyRules`): LLM 이전에 alert명·Events·리소스 상태로 장애 유형(CrashLoopBackOff/OOMKilled/ImagePullBackOff/JobFailed/Unschedulable/ControlPlaneDown/TargetDown 등)을 결정론적으로 분류. `rule_classification`을 LLM에 강한 prior로 전달 + 인시던트에 `rule` 뱃지 노출. 신호 없으면 Unknown.
 - **L1 상관분석 + 신뢰도 게이팅**: `EvidenceBundle.RelatedAlerts`(동시 발생 alert)를 LLM에 전달해 상관 추론. 근거(metric/log/event/resource)가 비면 `confidence≤0.4` + 제안을 조사용(suggestion/low)으로 유도. `evidenceQuality`(none/partial/rich)는 **코드 계산**(뷰/프론트 뱃지).
 - **L2 client-go 근거 수집**: `collector/kube.go`가 대상 네임스페이스/객체의 Events·리소스 상태(Pod/Deploy/STS/DS/Job)·노드 상태를 수집(네임스페이스 없는 인프라 alert는 node health + kube-system events). RBAC read-only. 근거가 채워지면 evidenceQuality 자동 상승.
 - **L3 agentic 도구 루프 + 검증**: LLM이 read-only 도구(`prometheus_query`/`loki_query`/`k8s_events`/`k8s_list_pods`)를 **프롬프트 기반 JSON 프로토콜**로 스스로 요청→백엔드 조회→재분석(최대 3회, 로컬 모델 호환 — 네이티브 tool-calling 불필요). 이후 **검증 패스**(회의적 리뷰어가 근거 대비 진단 비판·신뢰도 보정). `ToolRunner` 인터페이스는 diagnosis에 정의·collector가 구현·main이 주입(import cycle 회피). 도구 미가용(비 in-cluster) 시 단발+검증으로 graceful fallback.
