@@ -14,6 +14,7 @@ type EvidenceBundle struct {
 	Namespace    string                   `json:"namespace"`
 	Workload     string                   `json:"workload"`
 	Pod          string                   `json:"pod"`
+	Kind         string                   `json:"kind,omitempty"`
 	Severity     string                   `json:"severity,omitempty"`
 	Annotations  map[string]string        `json:"annotations,omitempty"`
 	Metrics      []map[string]interface{} `json:"metrics"`
@@ -54,14 +55,29 @@ func NewEvidenceBundle(payload AlertmanagerPayload) *EvidenceBundle {
 	pod := alert.Labels["pod"]
 	severity := alert.Labels["severity"]
 
-	// 워크로드 추정: deployment/statefulset/job 라벨 우선, 없으면 pod 사용
+	// 워크로드/종류 추정: 라벨 우선순위대로. kind는 client-go 수집 시 분기용.
 	workload := firstNonEmpty(
 		alert.Labels["deployment"],
 		alert.Labels["workload"],
 		alert.Labels["statefulset"],
+		alert.Labels["daemonset"],
 		alert.Labels["job"],
+		alert.Labels["job_name"],
 		pod,
 	)
+	kind := ""
+	switch {
+	case alert.Labels["deployment"] != "":
+		kind = "Deployment"
+	case alert.Labels["statefulset"] != "":
+		kind = "StatefulSet"
+	case alert.Labels["daemonset"] != "":
+		kind = "DaemonSet"
+	case alert.Labels["job"] != "" || alert.Labels["job_name"] != "":
+		kind = "Job"
+	case pod != "":
+		kind = "Pod"
+	}
 
 	source := payload.Receiver
 	if source == "" {
@@ -75,6 +91,7 @@ func NewEvidenceBundle(payload AlertmanagerPayload) *EvidenceBundle {
 		Namespace:    namespace,
 		Workload:     workload,
 		Pod:          pod,
+		Kind:         kind,
 		Severity:     severity,
 		Annotations:  alert.Annotations,
 		Metrics:      []map[string]interface{}{},

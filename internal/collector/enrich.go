@@ -12,6 +12,7 @@ import (
 type Enricher struct {
 	prom     *PrometheusClient
 	loki     *LokiClient
+	kube     *KubeCollector
 	logLines int
 }
 
@@ -20,6 +21,7 @@ func NewEnricher(cfg config.CollectorConfig) *Enricher {
 	return &Enricher{
 		prom:     NewPrometheusClient(cfg.PrometheusURL),
 		loki:     NewLokiClient(cfg.LokiURL),
+		kube:     NewKubeCollector(), // in-cluster 아니면 nil (자동 skip)
 		logLines: cfg.LogLines,
 	}
 }
@@ -65,5 +67,10 @@ func (e *Enricher) Enrich(b *models.EvidenceBundle) {
 		if lines, err := e.loki.QueryRecent(logQL, e.logLines); err == nil {
 			b.Logs = append(b.Logs, lines...)
 		}
+	}
+
+	// 3. Kubernetes API: Events + 리소스 상태 + 노드 상태 (in-cluster, best-effort) — L2
+	if e.kube != nil {
+		e.kube.Enrich(b)
 	}
 }
