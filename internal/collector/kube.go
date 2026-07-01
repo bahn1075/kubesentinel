@@ -58,6 +58,51 @@ func (k *KubeCollector) Enrich(b *models.EvidenceBundle) {
 	}
 }
 
+// Events는 agentic 도구용 공개 래퍼: 네임스페이스(+선택 객체)의 최근 이벤트.
+func (k *KubeCollector) Events(ns, name string) []string {
+	if k == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	return k.events(ctx, ns, name)
+}
+
+// ListPods는 네임스페이스의 pod와 상태(phase, waiting reason, restarts)를 요약한다(agentic 도구용).
+func (k *KubeCollector) ListPods(ns string) []string {
+	if k == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	pods, err := k.cs.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{Limit: 100})
+	if err != nil {
+		return []string{"ERROR: " + err.Error()}
+	}
+	out := make([]string, 0, len(pods.Items))
+	for _, p := range pods.Items {
+		reason := ""
+		restarts := int32(0)
+		for _, cs := range p.Status.ContainerStatuses {
+			restarts += cs.RestartCount
+			if cs.State.Waiting != nil && cs.State.Waiting.Reason != "" {
+				reason = cs.State.Waiting.Reason
+			} else if cs.State.Terminated != nil && cs.State.Terminated.Reason != "" {
+				reason = cs.State.Terminated.Reason
+			}
+		}
+		line := fmt.Sprintf("%s: %s", p.Name, p.Status.Phase)
+		if reason != "" {
+			line += " (" + reason + ")"
+		}
+		if restarts > 0 {
+			line += fmt.Sprintf(" restarts=%d", restarts)
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
 // events는 네임스페이스의 최근 이벤트를 최신순으로 문자열 목록으로 반환한다.
 // objName이 있으면 involvedObject.name으로 좁힌다.
 func (k *KubeCollector) events(ctx context.Context, ns, objName string) []string {

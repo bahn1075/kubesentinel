@@ -59,7 +59,9 @@ func main() {
 
 	// 3. Initialize Components (병합된 cfg 기준)
 	aiGateway := provider.NewAIGateway(&cfg.AI)
-	engine := diagnosis.NewEngine(aiGateway)
+	// agentic 진단용 read-only 도구 실행기 (LLM이 근거를 스스로 수집) — L3
+	toolRunner := collector.NewToolRunner(cfg.Collector)
+	engine := diagnosis.NewEngine(aiGateway, toolRunner)
 	enricher := collector.NewEnricher(cfg.Collector)
 	notify, err := notifier.New(cfg.Notifier, cfg.Collector.GrafanaURL)
 	if err != nil {
