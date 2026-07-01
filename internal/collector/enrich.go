@@ -73,4 +73,7 @@ func (e *Enricher) Enrich(b *models.EvidenceBundle) {
 	if e.kube != nil {
 		e.kube.Enrich(b)
 	}
+
+	// 4. Rule Analyzer: 수집된 근거로 장애 유형 결정론적 1차 분류 (LLM prior) — architecture §4.3
+	b.Rule = models.ClassifyRules(b)
 }

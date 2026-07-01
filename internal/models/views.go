@@ -15,6 +15,7 @@ type IncidentView struct {
 	CreatedAt  time.Time      `json:"createdAt"`
 	Diagnosis  *DiagnosisView `json:"diagnosis,omitempty"`
 	Evidence   *EvidenceView  `json:"evidence,omitempty"`
+	Rule       *RuleResult    `json:"rule,omitempty"` // 결정론적 룰 분류
 	PRURL      string         `json:"prUrl,omitempty"`
 }
 
@@ -53,6 +54,7 @@ func NewIncidentView(b *EvidenceBundle, d *DiagnosisResult, state string) Incide
 		Severity:   b.Severity,
 		State:      state,
 		CreatedAt:  time.Now().UTC(),
+		Rule:       b.Rule,
 		Evidence: &EvidenceView{
 			Metrics:       b.Metrics,
 			Logs:          b.Logs,

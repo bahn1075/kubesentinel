@@ -24,6 +24,8 @@ type EvidenceBundle struct {
 	GitContext   GitContext               `json:"git_context"`
 	// 동시에 firing 중인 다른 alert들 (상관 분석용 컨텍스트). LLM에 함께 전달된다.
 	RelatedAlerts []RelatedAlert `json:"related_alerts,omitempty"`
+	// 결정론적 룰 분류(LLM 이전). LLM 컨텍스트에 prior로 포함된다.
+	Rule *RuleResult `json:"rule_classification,omitempty"`
 }
 
 // RelatedAlert는 상관 분석을 위한 동시 발생 alert의 요약입니다.

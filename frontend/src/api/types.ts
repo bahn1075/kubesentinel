@@ -68,6 +68,7 @@ export interface Incident {
   createdAt: string; // ISO
   diagnosis?: DiagnosisResult;
   evidence?: EvidenceBundle;
+  rule?: { category: string; rationale?: string; signals?: string[] };
   prUrl?: string;
 }
 

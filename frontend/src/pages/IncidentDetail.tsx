@@ -27,6 +27,9 @@ export default function IncidentDetail() {
         <code>{inc.alert}</code>{" "}
         <span className={`badge ${severityClass(inc.severity)}`}>{inc.severity}</span>{" "}
         <span className={`badge ${stateClass(inc.state)}`}>{inc.state}</span>
+        {inc.rule && inc.rule.category !== "Unknown" && (
+          <> <span className="badge info" title={inc.rule.rationale}>rule: {inc.rule.category}</span></>
+        )}
       </h1>
       <p className="page-sub mono">{inc.incidentId} · {inc.namespace}/{inc.workload}{inc.pod ? ` · ${inc.pod}` : ""} · {formatTime(inc.createdAt)}</p>
 
