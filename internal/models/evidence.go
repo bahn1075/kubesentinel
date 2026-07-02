@@ -26,6 +26,15 @@ type EvidenceBundle struct {
 	RelatedAlerts []RelatedAlert `json:"related_alerts,omitempty"`
 	// 결정론적 룰 분류(LLM 이전). LLM 컨텍스트에 prior로 포함된다.
 	Rule *RuleResult `json:"rule_classification,omitempty"`
+	// 매칭된 운영자 runbook(메타데이터/키워드 검색). 본문이 LLM 컨텍스트에 포함된다.
+	Runbooks []RunbookMatch `json:"matched_runbooks,omitempty"`
+}
+
+// RunbookMatch는 인시던트에 매칭된 runbook입니다.
+type RunbookMatch struct {
+	Title    string `json:"title"`
+	Category string `json:"category,omitempty"`
+	Body     string `json:"body,omitempty"`
 }
 
 // RelatedAlert는 상관 분석을 위한 동시 발생 alert의 요약입니다.

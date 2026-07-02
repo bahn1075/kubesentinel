@@ -98,6 +98,18 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.runbooks.enabled }}
+          volumeMounts:
+            - name: runbooks
+              mountPath: /etc/kubesentinel/runbooks
+              readOnly: true
+          {{- end }}
+      {{- if .Values.runbooks.enabled }}
+      volumes:
+        - name: runbooks
+          configMap:
+            name: {{ include "kubesentinel-ai.runbooksConfigMap" . }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

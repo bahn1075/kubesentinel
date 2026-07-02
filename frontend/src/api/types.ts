@@ -55,6 +55,7 @@ export interface EvidenceBundle {
   resourceStatus?: Record<string, unknown>;
   gitContext?: { repo: string; path: string; lastCommit: string };
   relatedAlerts?: RelatedAlert[];
+  runbooks?: string[];
 }
 
 export interface Incident {

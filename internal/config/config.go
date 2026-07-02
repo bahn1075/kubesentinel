@@ -30,6 +30,7 @@ type CollectorConfig struct {
 	GrafanaURL      string `yaml:"grafana_url"`       // 알림 딥링크용 (선택)
 	LogLines        int    `yaml:"log_lines"`         // Loki에서 가져올 최근 로그 라인 수
 	PollIntervalSec int    `yaml:"poll_interval_sec"` // Alertmanager 폴링 주기(초)
+	RunbookDir      string `yaml:"runbook_dir"`       // runbook markdown 디렉토리(ConfigMap 마운트)
 }
 
 // AppConfig는 애플리케이션 자체의 기본 설정을 담습니다.
@@ -81,6 +82,7 @@ func LoadConfig() (*Config, error) {
 		Collector: CollectorConfig{
 			LogLines:        50,
 			PollIntervalSec: 30,
+			RunbookDir:      "/etc/kubesentinel/runbooks",
 		},
 		GitOps: GitOpsConfig{
 			BaseBranch:   "main",
@@ -115,6 +117,9 @@ func LoadConfig() (*Config, error) {
 	}
 	if val := os.Getenv("KUBESENTINEL_AI_ALERTMANAGER_URL"); val != "" {
 		cfg.Collector.AlertmanagerURL = val
+	}
+	if val := os.Getenv("KUBESENTINEL_AI_RUNBOOK_DIR"); val != "" {
+		cfg.Collector.RunbookDir = val
 	}
 	if val := os.Getenv("KUBESENTINEL_AI_GRAFANA_URL"); val != "" {
 		cfg.Collector.GrafanaURL = val

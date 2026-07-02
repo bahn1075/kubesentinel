@@ -35,6 +35,7 @@ type EvidenceView struct {
 	ResourceStatus map[string]interface{}   `json:"resourceStatus,omitempty"`
 	GitContext     *GitContextView          `json:"gitContext,omitempty"`
 	RelatedAlerts  []RelatedAlert           `json:"relatedAlerts,omitempty"`
+	Runbooks       []string                 `json:"runbooks,omitempty"` // 매칭된 runbook 제목(본문은 뷰에 저장 안 함)
 }
 
 type GitContextView struct {
@@ -64,6 +65,9 @@ func NewIncidentView(b *EvidenceBundle, d *DiagnosisResult, state string) Incide
 	}
 	if len(b.ResourceYAML) > 0 {
 		v.Evidence.ResourceStatus = b.ResourceYAML
+	}
+	for _, rb := range b.Runbooks {
+		v.Evidence.Runbooks = append(v.Evidence.Runbooks, rb.Title)
 	}
 	if b.GitContext.Repo != "" || b.GitContext.Path != "" {
 		v.Evidence.GitContext = &GitContextView{

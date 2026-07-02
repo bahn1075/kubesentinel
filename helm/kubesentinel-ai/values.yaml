@@ -62,6 +62,12 @@ postgres:
   storage: 1Gi                 # PVC 크기
   storageClassName: ""         # 미지정 시 클러스터 default
 
+# ── Runbook (진단 시 LLM에 주입되는 운영자 runbook — 메타데이터/키워드 매칭, 벡터DB 불필요) ──
+# 기본 샘플 runbook을 ConfigMap으로 /etc/kubesentinel/runbooks에 마운트.
+runbooks:
+  enabled: true
+  existingConfigMap: ""   # 지정 시 샘플 대신 이 ConfigMap 마운트(자체 runbook)
+
 database:
   # 외부 DB를 쓰려면 여기에 DSN을 넣는다(설정 시 in-chart postgres 주소보다 우선).
   # 비워두면 postgres.enabled=true일 때 in-chart 서비스로 자동 구성된다.

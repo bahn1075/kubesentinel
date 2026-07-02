@@ -1,0 +1,52 @@
+{{- if and .Values.runbooks.enabled (not .Values.runbooks.existingConfigMap) -}}
+# 샘플 runbook (메타데이터/키워드 매칭용). 운영에서는 자체 runbook으로 교체하거나
+# runbooks.existingConfigMap 으로 외부 ConfigMap을 참조하라. 각 key는 마운트 시 파일이 된다.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kubesentinel-ai.fullname" . }}-runbooks
+  labels:
+    {{- include "kubesentinel-ai.labels" . | nindent 4 }}
+data:
+  crashloopbackoff.md: |
+    ---
+    title: Pod CrashLoopBackOff
+    category: CrashLoopBackOff
+    alerts: [KubePodCrashLooping, KubePodCrashLoopBackOff]
+    keywords: [crashloop, restart, backoff]
+    ---
+    ## Investigation
+    1. `kubectl -n <ns> logs <pod> --previous` 로 종료 직전 로그(패닉/에러) 확인.
+    2. `kubectl -n <ns> describe pod <pod>` 로 마지막 상태·종료 코드·Events 확인.
+    3. 최근 배포/이미지 변경 여부(rollout history) 확인.
+    ## Remediation
+    - 앱 설정/시크릿/환경변수 누락이면 매니페스트 수정 PR.
+    - 최근 배포가 원인이면 직전 정상 revision으로 rollback.
+    - readiness/liveness가 과도하면 probe 조정.
+  oomkilled.md: |
+    ---
+    title: Container OOMKilled
+    category: OOMKilled
+    alerts: [KubeContainerOOMKilled, OOMKilled]
+    keywords: [oom, memory, limit]
+    ---
+    ## Investigation
+    1. `container_memory_working_set_bytes` vs memory limit 비교(peak 초과 여부).
+    2. describe로 OOMKilled Events·직전 사용량 확인.
+    ## Remediation
+    - 워킹셋이 지속 초과면 memory limit 상향 PR(values/manifest).
+    - 메모리 누수 의심이면 앱 프로파일링(소스 이슈).
+  imagepullbackoff.md: |
+    ---
+    title: ImagePullBackOff / ErrImagePull
+    category: ImagePullBackOff
+    alerts: [KubePodImagePullBackOff, KubeContainerWaiting]
+    keywords: [imagepull, errimage, registry, tag]
+    ---
+    ## Investigation
+    1. describe로 정확한 사유(존재하지 않는 태그 vs 인증 실패) 확인.
+    2. image tag 오타/누락, registry pull secret 유효성 확인.
+    ## Remediation
+    - 태그 오타면 image tag 수정 PR.
+    - 인증 실패면 imagePullSecret 점검(시크릿 변경은 승인 필요).
+{{- end }}

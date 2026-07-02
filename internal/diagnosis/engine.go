@@ -45,6 +45,7 @@ const schemaRules = "Respond with ONLY a single JSON object, no markdown, EXACTL
 	"}\n" +
 	"'root_cause' and 'summary' MUST be plain strings (never nested objects).\n" +
 	"RULE PRIOR: 'rule_classification' is a deterministic heuristic pre-classification (e.g., CrashLoopBackOff/OOMKilled/ImagePullBackOff). Treat its category as a STRONG PRIOR when it is not 'Unknown', but still verify against the evidence and override it if the evidence clearly contradicts.\n" +
+	"RUNBOOKS: 'matched_runbooks' are operator-authored runbooks selected for this failure type — follow their investigation/remediation steps when relevant and reference them in the summary.\n" +
 	"CORRELATION: 'related_alerts' in the evidence lists OTHER alerts firing simultaneously — correlate them; the true cause may originate from a different alert/resource (e.g., a failing CronJob/Job or node problem making control-plane targets look 'Down').\n" +
 	"CONFIDENCE GATING: if metrics, logs, events and resource_status are all empty, you are guessing from the alert name — set confidence <= 0.4, phrase root_cause as a hypothesis, state what evidence is missing, and make proposed_actions INVESTIGATION steps (type='suggestion', risk='low'), not specific fixes."
 

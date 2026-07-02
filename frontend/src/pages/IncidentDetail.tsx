@@ -107,6 +107,12 @@ export default function IncidentDetail() {
           {inc.evidence.gitContext && (
             <p className="mono muted">git: {inc.evidence.gitContext.repo}/{inc.evidence.gitContext.path} @ {inc.evidence.gitContext.lastCommit}</p>
           )}
+          {inc.evidence.runbooks && inc.evidence.runbooks.length > 0 && (
+            <>
+              <p className="k muted" style={{ margin: "0 0 4px" }}>매칭된 Runbook</p>
+              <div>{inc.evidence.runbooks.map((r, i) => <span key={i} className="badge ok" style={{ marginRight: 6 }}>📘 {r}</span>)}</div>
+            </>
+          )}
           {inc.evidence.resourceStatus && Object.keys(inc.evidence.resourceStatus).length > 0 && (
             <>
               <p className="k muted" style={{ margin: "10px 0 4px" }}>Resource Status (K8s API)</p>
