@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, Link } from "react-router-dom";
 import type { ReactNode } from "react";
 import { isMockMode } from "../api/client";
 
@@ -14,9 +14,9 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="brand">
-          <span className="dot" /> KubeSentinel
-        </div>
+        <Link to="/" className="brand">
+          <img src="/favicon.svg" className="brand-logo" alt="" /> KubeSentinel
+        </Link>
         <nav className="nav">
           {NAV.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end}>

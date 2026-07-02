@@ -23,6 +23,8 @@ h1, h2, h3 { font-weight: 600; }
 .sidebar { background: var(--bg-elev); border-right: 1px solid var(--border); padding: 16px 12px; }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; padding: 8px 8px 16px; }
 .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.brand-logo { width: 22px; height: 22px; display: block; }
+a.brand:hover { opacity: 0.85; }
 .nav a { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 6px; color: var(--text-dim); }
 .nav a:hover { background: var(--bg-elev2); color: var(--text); }
 .nav a.active { background: var(--bg-elev2); color: var(--text); }
