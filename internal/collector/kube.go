@@ -9,6 +9,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -19,6 +20,7 @@ import (
 // in-cluster 설정이 없으면(로컬 실행 등) nil이 되어 자동 skip 된다(best-effort).
 type KubeCollector struct {
 	cs        *kubernetes.Clientset
+	dyn       dynamic.Interface // 범용 리소스 조회(k8s_get)용
 	maxEvents int
 }
 
@@ -34,7 +36,11 @@ func NewKubeCollector() *KubeCollector {
 		fmt.Printf("[KubeSentinel] KubeCollector init failed: %v\n", err)
 		return nil
 	}
-	return &KubeCollector{cs: cs, maxEvents: 20}
+	dyn, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		fmt.Printf("[KubeSentinel] dynamic client init failed (k8s_get disabled): %v\n", err)
+	}
+	return &KubeCollector{cs: cs, dyn: dyn, maxEvents: 20}
 }
 
 // Enrich는 bundle에 Kubernetes Events·리소스 상태·노드 상태를 in-place로 보강한다(best-effort).

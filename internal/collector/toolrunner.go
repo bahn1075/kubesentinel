@@ -37,6 +37,8 @@ func (t *ToolRunner) Specs() []diagnosis.ToolSpec {
 		{Name: "k8s_list_pods", Description: "List pods and their status/restarts in a namespace", Args: `{"namespace":"x"}`},
 		{Name: "k8s_get_nodes", Description: "List cluster nodes with architecture (arch), Ready state and taints — use to compare image platforms vs node arch", Args: `{}`},
 		{Name: "image_inspect", Description: "Inspect a container image in the registry: supported platforms (os/arch) and whether the tag exists. Use for ImagePullBackOff to detect arch mismatch or missing tag (public docker.io only)", Args: `{"image":"docker.io/org/name:tag"}`},
+		{Name: "k8s_get", Description: "Get any Kubernetes resource as JSON (kubectl get -o json). Any kind: pod/deployment/service/configmap/ingress/hpa/pvc/node/job/cronjob/statefulset/daemonset/... With 'name' → full object; without → name list. namespace required for namespaced kinds. Secrets are NOT allowed.", Args: `{"kind":"deployment","namespace":"x","name":"<optional>"}`},
+		{Name: "k8s_logs", Description: "Fetch a pod container's logs directly from the API (kubectl logs). Use previous=true for the last terminated container (CrashLoop root cause).", Args: `{"namespace":"x","pod":"y","container":"<optional>","previous":false,"tailLines":100}`},
 	}
 }
 
@@ -131,6 +133,35 @@ func (t *ToolRunner) Run(name string, args map[string]interface{}) string {
 		}
 		b, _ := json.Marshal(info)
 		return string(b)
+
+	case "k8s_get":
+		if t.kube == nil {
+			return "ERROR: kubernetes API not available (not in-cluster)"
+		}
+		kind := argStr(args, "kind")
+		if kind == "" {
+			return "ERROR: missing 'kind'"
+		}
+		return t.kube.GetResource(kind, argStr(args, "namespace"), argStr(args, "name"))
+
+	case "k8s_logs":
+		if t.kube == nil {
+			return "ERROR: kubernetes API not available (not in-cluster)"
+		}
+		ns := argStr(args, "namespace")
+		pod := argStr(args, "pod")
+		if ns == "" || pod == "" {
+			return "ERROR: 'namespace' and 'pod' are required"
+		}
+		previous := false
+		if v, ok := args["previous"].(bool); ok {
+			previous = v
+		}
+		tail := 100
+		if v, ok := args["tailLines"].(float64); ok && v > 0 {
+			tail = int(v)
+		}
+		return t.kube.GetLogs(ns, pod, argStr(args, "container"), previous, tail)
 
 	default:
 		return fmt.Sprintf("ERROR: unknown tool %q", name)

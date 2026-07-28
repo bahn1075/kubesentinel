@@ -90,9 +90,10 @@ func (e *Engine) analyzeSingle(evidenceJSON string) (*models.DiagnosisResult, er
 // analyzeAgentic: LLM이 read-only 도구로 근거를 스스로 수집(최대 maxIter)한 뒤 최종 진단.
 func (e *Engine) analyzeAgentic(evidenceJSON string) (*models.DiagnosisResult, error) {
 	sys := "You are a Kubernetes SRE performing a root-cause investigation.\n" +
-		"You may gather MORE read-only evidence using tools before concluding.\n" +
+		"You may gather MORE read-only evidence using tools before concluding — inspect the ACTUAL cluster state like you would with kubectl.\n" +
 		"AVAILABLE TOOLS:\n" + toolList(e.tools.Specs()) +
-		"\nPROTOCOL: To call a tool respond with ONLY {\"tool\":\"<name>\",\"args\":{...},\"reason\":\"<why>\"}.\n" +
+		"\nGUIDANCE: Use 'k8s_get' to read any resource's real spec/status (deployment, pod, service, configmap, ingress, hpa, node, job, …) and 'k8s_logs' (previous=true) for crashing containers. Prefer inspecting concrete resources over guessing. Do NOT request Secrets. Base the diagnosis on what you actually observe.\n" +
+		"PROTOCOL: To call a tool respond with ONLY {\"tool\":\"<name>\",\"args\":{...},\"reason\":\"<why>\"}.\n" +
 		"When you have enough evidence, respond with the FINAL diagnosis JSON instead.\n" +
 		"FINAL FORMAT: " + schemaRules
 
