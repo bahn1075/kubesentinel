@@ -28,6 +28,8 @@ type EvidenceBundle struct {
 	Rule *RuleResult `json:"rule_classification,omitempty"`
 	// 매칭된 운영자 runbook(메타데이터/키워드 검색). 본문이 LLM 컨텍스트에 포함된다.
 	Runbooks []RunbookMatch `json:"matched_runbooks,omitempty"`
+	// 결정론적 조사 프로브 결과(예: 이미지 arch vs 노드 arch 비교). 고신뢰 근거로 LLM에 주입된다.
+	ProbeFindings []string `json:"probe_findings,omitempty"`
 }
 
 // RunbookMatch는 인시던트에 매칭된 runbook입니다.

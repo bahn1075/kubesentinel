@@ -12,17 +12,19 @@ import (
 // ToolRunner는 agentic 진단에서 LLM이 요청하는 read-only 근거 수집 도구를 실행합니다.
 // diagnosis.ToolRunner 인터페이스를 구현하며 main에서 Engine에 주입된다.
 type ToolRunner struct {
-	prom *PrometheusClient
-	loki *LokiClient
-	kube *KubeCollector
+	prom     *PrometheusClient
+	loki     *LokiClient
+	kube     *KubeCollector
+	registry *RegistryClient
 }
 
 // NewToolRunner는 설정 기반으로 도구 실행기를 만든다. (in-cluster/엔드포인트 없으면 해당 도구는 비활성)
 func NewToolRunner(cfg config.CollectorConfig) *ToolRunner {
 	return &ToolRunner{
-		prom: NewPrometheusClient(cfg.PrometheusURL),
-		loki: NewLokiClient(cfg.LokiURL),
-		kube: NewKubeCollector(),
+		prom:     NewPrometheusClient(cfg.PrometheusURL),
+		loki:     NewLokiClient(cfg.LokiURL),
+		kube:     NewKubeCollector(),
+		registry: NewRegistryClient(),
 	}
 }
 
@@ -33,6 +35,8 @@ func (t *ToolRunner) Specs() []diagnosis.ToolSpec {
 		{Name: "loki_query", Description: "Fetch recent logs by LogQL selector", Args: `{"query":"{namespace=\"x\",pod=\"y\"}","limit":50}`},
 		{Name: "k8s_events", Description: "Recent Kubernetes events in a namespace (optionally for one object)", Args: `{"namespace":"x","name":"<optional>"}`},
 		{Name: "k8s_list_pods", Description: "List pods and their status/restarts in a namespace", Args: `{"namespace":"x"}`},
+		{Name: "k8s_get_nodes", Description: "List cluster nodes with architecture (arch), Ready state and taints — use to compare image platforms vs node arch", Args: `{}`},
+		{Name: "image_inspect", Description: "Inspect a container image in the registry: supported platforms (os/arch) and whether the tag exists. Use for ImagePullBackOff to detect arch mismatch or missing tag (public docker.io only)", Args: `{"image":"docker.io/org/name:tag"}`},
 	}
 }
 
@@ -102,6 +106,31 @@ func (t *ToolRunner) Run(name string, args map[string]interface{}) string {
 			return "(no pods)"
 		}
 		return strings.Join(pods, "\n")
+
+	case "k8s_get_nodes":
+		if t.kube == nil {
+			return "ERROR: kubernetes API not available (not in-cluster)"
+		}
+		info := t.kube.NodeInfoSummary()
+		if len(info) == 0 {
+			return "(no nodes)"
+		}
+		return strings.Join(info, "\n")
+
+	case "image_inspect":
+		if t.registry == nil {
+			return "ERROR: registry client not configured"
+		}
+		img := argStr(args, "image")
+		if img == "" {
+			return "ERROR: missing 'image'"
+		}
+		info, err := t.registry.InspectImage(img)
+		if err != nil {
+			return "ERROR: " + err.Error()
+		}
+		b, _ := json.Marshal(info)
+		return string(b)
 
 	default:
 		return fmt.Sprintf("ERROR: unknown tool %q", name)

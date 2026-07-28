@@ -37,6 +37,8 @@ type EvidenceView struct {
 	RelatedAlerts  []RelatedAlert           `json:"relatedAlerts,omitempty"`
 	// 매칭된 runbook(제목+본문 조치). LLM 진단이 실패해도 화면에 결정적 권장 조치를 제공한다.
 	Runbooks []RunbookView `json:"runbooks,omitempty"`
+	// 결정론적 조사 프로브 결과(예: 이미지 arch vs 노드 arch). 구체적 근본 원인을 화면에 표시한다.
+	ProbeFindings []string `json:"probeFindings,omitempty"`
 }
 
 // RunbookView는 프론트 표시용 runbook(제목·분류·조치 본문)이다.
@@ -69,6 +71,7 @@ func NewIncidentView(b *EvidenceBundle, d *DiagnosisResult, state string) Incide
 			Logs:          b.Logs,
 			Events:        b.Events,
 			RelatedAlerts: b.RelatedAlerts,
+			ProbeFindings: b.ProbeFindings,
 		},
 	}
 	if len(b.ResourceYAML) > 0 {
@@ -109,10 +112,11 @@ func evidenceQuality(b *EvidenceBundle) string {
 	m := len(b.Metrics) > 0
 	l := len(b.Logs) > 0
 	e := len(b.Events) > 0
+	p := len(b.ProbeFindings) > 0 // 결정론적 프로브 근거도 근거로 계산
 	switch {
 	case m && l:
 		return "rich"
-	case m || l || e:
+	case m || l || e || p:
 		return "partial"
 	default:
 		return "none"

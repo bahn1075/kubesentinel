@@ -6,12 +6,12 @@
 # 신규 배포 시: 이미지 빌드·push 후 아래 tag를 새 태그로 갱신 → commit → ArgoCD 자동 동기화.
 image:
   repository: docker.io/bahn1075/kubesentinel-ai
-  tag: "202607280928"
+  tag: "202607281420"
   pullPolicy: IfNotPresent
 frontend:
   image:
     repository: docker.io/bahn1075/kubesentinel-ai-front
-    tag: "202607280930"
+    tag: "202607281421"
     pullPolicy: IfNotPresent
 
 ai:

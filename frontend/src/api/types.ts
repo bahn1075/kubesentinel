@@ -57,6 +57,8 @@ export interface EvidenceBundle {
   relatedAlerts?: RelatedAlert[];
   // 구버전 인시던트는 string[](제목만), 신버전은 객체(제목+조치 본문). 둘 다 허용.
   runbooks?: (string | RunbookRef)[];
+  // 결정론적 조사 프로브 결과(예: 이미지 arch vs 노드 arch 비교) — 구체적 근본 원인.
+  probeFindings?: string[];
 }
 
 export interface RunbookRef {

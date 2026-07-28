@@ -11,6 +11,24 @@ function evidenceBadge(q?: string) {
   return <span className="badge crit">근거 부족 · 조사용</span>; // none
 }
 
+// 자동 조사 프로브 결과 블록 (결정론적 근거 — arch 불일치/태그 없음 등을 강조)
+function ProbeBlock({ findings }: { findings: string[] }) {
+  if (!findings.length) return null;
+  return (
+    <>
+      <p className="k muted" style={{ margin: "0 0 4px" }}>자동 조사 결과 (Probe · 결정론적)</p>
+      <div className="logs">
+        {findings.map((f, i) => {
+          const alert = f.includes("⚠️") || f.includes("불일치") || f.includes("없음");
+          return (
+            <div key={i} style={alert ? { color: "var(--crit)" } : undefined}>• {f}</div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 export default function IncidentDetail() {
   const { id = "" } = useParams();
   const { data: inc, loading } = useAsync(() => fetchIncident(id), [id]);
@@ -25,6 +43,7 @@ export default function IncidentDetail() {
     typeof r === "string" ? { title: r } : r,
   );
   const runbooksWithBody = runbooks.filter((r) => r.body);
+  const probeFindings = inc.evidence?.probeFindings ?? [];
 
   return (
     <>
@@ -109,6 +128,7 @@ export default function IncidentDetail() {
               {inc.rule.rationale && <span className="muted">{inc.rule.rationale}</span>}
             </p>
           )}
+          {probeFindings.length > 0 && <div style={{ marginBottom: 12 }}><ProbeBlock findings={probeFindings} /></div>}
           {runbooksWithBody.length > 0 ? (
             runbooksWithBody.map((rb, i) => (
               <div key={i} style={{ marginTop: 10 }}>
@@ -132,6 +152,9 @@ export default function IncidentDetail() {
       {inc.evidence && (
         <div className="section">
           <h3>근거 (Evidence)</h3>
+          {probeFindings.length > 0 && (
+            <div style={{ marginBottom: 12 }}><ProbeBlock findings={probeFindings} /></div>
+          )}
           {inc.evidence.relatedAlerts && inc.evidence.relatedAlerts.length > 0 && (
             <>
               <p className="k muted" style={{ margin: "0 0 4px" }}>동시 발생 alert (상관 분석 입력)</p>

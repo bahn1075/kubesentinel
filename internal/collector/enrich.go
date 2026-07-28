@@ -14,6 +14,7 @@ type Enricher struct {
 	prom     *PrometheusClient
 	loki     *LokiClient
 	kube     *KubeCollector
+	registry *RegistryClient
 	runbooks *runbook.Store
 	logLines int
 }
@@ -24,6 +25,7 @@ func NewEnricher(cfg config.CollectorConfig) *Enricher {
 		prom:     NewPrometheusClient(cfg.PrometheusURL),
 		loki:     NewLokiClient(cfg.LokiURL),
 		kube:     NewKubeCollector(), // in-cluster 아니면 nil (자동 skip)
+		registry: NewRegistryClient(),
 		runbooks: runbook.Load(cfg.RunbookDir),
 		logLines: cfg.LogLines,
 	}
@@ -80,7 +82,10 @@ func (e *Enricher) Enrich(b *models.EvidenceBundle) {
 	// 4. Rule Analyzer: 수집된 근거로 장애 유형 결정론적 1차 분류 (LLM prior) — architecture §4.3
 	b.Rule = models.ClassifyRules(b)
 
-	// 5. Runbook 매칭 (alertname + rule 카테고리) — 메타데이터/키워드 검색, LLM 컨텍스트에 주입
+	// 5. 결정론적 조사 프로브(카테고리별 심층 조사) — 구체적 근본 원인 근거 주입
+	e.probe(b)
+
+	// 6. Runbook 매칭 (alertname + rule 카테고리) — 메타데이터/키워드 검색, LLM 컨텍스트에 주입
 	cat := ""
 	if b.Rule != nil {
 		cat = b.Rule.Category

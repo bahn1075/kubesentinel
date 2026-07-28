@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -99,6 +100,94 @@ func (k *KubeCollector) ListPods(ns string) []string {
 			line += fmt.Sprintf(" restarts=%d", restarts)
 		}
 		out = append(out, line)
+	}
+	return out
+}
+
+// NodeArchs는 클러스터 노드의 고유 아키텍처 집합을 반환한다(예: ["arm64"]). (프로브/도구용)
+func (k *KubeCollector) NodeArchs() []string {
+	if k == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	nodes, err := k.cs.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil
+	}
+	set := map[string]bool{}
+	for _, n := range nodes.Items {
+		if a := n.Status.NodeInfo.Architecture; a != "" {
+			set[a] = true
+		}
+	}
+	archs := make([]string, 0, len(set))
+	for a := range set {
+		archs = append(archs, a)
+	}
+	sort.Strings(archs)
+	return archs
+}
+
+// NodeInfoSummary는 노드 arch·수·비정상 여부를 사람이 읽는 요약으로 반환한다(agentic 도구용).
+func (k *KubeCollector) NodeInfoSummary() []string {
+	if k == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	nodes, err := k.cs.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return []string{"ERROR: " + err.Error()}
+	}
+	archCount := map[string]int{}
+	out := make([]string, 0, len(nodes.Items)+1)
+	for _, n := range nodes.Items {
+		arch := n.Status.NodeInfo.Architecture
+		archCount[arch]++
+		ready := "NotReady"
+		for _, c := range n.Status.Conditions {
+			if c.Type == "Ready" && c.Status == "True" {
+				ready = "Ready"
+			}
+		}
+		taints := ""
+		if len(n.Spec.Taints) > 0 {
+			ts := make([]string, 0, len(n.Spec.Taints))
+			for _, t := range n.Spec.Taints {
+				ts = append(ts, t.Key+"="+string(t.Effect))
+			}
+			taints = " taints=[" + strings.Join(ts, ",") + "]"
+		}
+		out = append(out, fmt.Sprintf("%s: arch=%s %s%s", n.Name, arch, ready, taints))
+	}
+	summary := make([]string, 0, len(archCount))
+	for a, c := range archCount {
+		summary = append(summary, fmt.Sprintf("%s×%d", a, c))
+	}
+	sort.Strings(summary)
+	out = append([]string{"node architectures: " + strings.Join(summary, ", ")}, out...)
+	return out
+}
+
+// PodImages는 파드(및 대체로 잡의 첫 파드) 컨테이너 이미지 목록을 반환한다(init 포함). (프로브/도구용)
+func (k *KubeCollector) PodImages(ns, pod string) []string {
+	if k == nil || ns == "" || pod == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	p, err := k.cs.CoreV1().Pods(ns).Get(ctx, pod, metav1.GetOptions{})
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, c := range append(append([]corev1.Container{}, p.Spec.InitContainers...), p.Spec.Containers...) {
+		if c.Image != "" && !seen[c.Image] {
+			seen[c.Image] = true
+			out = append(out, c.Image)
+		}
 	}
 	return out
 }
