@@ -55,7 +55,14 @@ export interface EvidenceBundle {
   resourceStatus?: Record<string, unknown>;
   gitContext?: { repo: string; path: string; lastCommit: string };
   relatedAlerts?: RelatedAlert[];
-  runbooks?: string[];
+  // 구버전 인시던트는 string[](제목만), 신버전은 객체(제목+조치 본문). 둘 다 허용.
+  runbooks?: (string | RunbookRef)[];
+}
+
+export interface RunbookRef {
+  title: string;
+  category?: string;
+  body?: string;
 }
 
 export interface Incident {

@@ -35,7 +35,15 @@ type EvidenceView struct {
 	ResourceStatus map[string]interface{}   `json:"resourceStatus,omitempty"`
 	GitContext     *GitContextView          `json:"gitContext,omitempty"`
 	RelatedAlerts  []RelatedAlert           `json:"relatedAlerts,omitempty"`
-	Runbooks       []string                 `json:"runbooks,omitempty"` // 매칭된 runbook 제목(본문은 뷰에 저장 안 함)
+	// 매칭된 runbook(제목+본문 조치). LLM 진단이 실패해도 화면에 결정적 권장 조치를 제공한다.
+	Runbooks []RunbookView `json:"runbooks,omitempty"`
+}
+
+// RunbookView는 프론트 표시용 runbook(제목·분류·조치 본문)이다.
+type RunbookView struct {
+	Title    string `json:"title"`
+	Category string `json:"category,omitempty"`
+	Body     string `json:"body,omitempty"`
 }
 
 type GitContextView struct {
@@ -67,7 +75,11 @@ func NewIncidentView(b *EvidenceBundle, d *DiagnosisResult, state string) Incide
 		v.Evidence.ResourceStatus = b.ResourceYAML
 	}
 	for _, rb := range b.Runbooks {
-		v.Evidence.Runbooks = append(v.Evidence.Runbooks, rb.Title)
+		v.Evidence.Runbooks = append(v.Evidence.Runbooks, RunbookView{
+			Title:    rb.Title,
+			Category: rb.Category,
+			Body:     rb.Body,
+		})
 	}
 	if b.GitContext.Repo != "" || b.GitContext.Path != "" {
 		v.Evidence.GitContext = &GitContextView{

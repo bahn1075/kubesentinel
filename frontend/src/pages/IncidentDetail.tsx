@@ -20,6 +20,12 @@ export default function IncidentDetail() {
 
   const currentIdx = STATE_FLOW.indexOf(inc.state);
 
+  // 구버전(string) / 신버전(object) runbook 형태를 모두 정규화
+  const runbooks = (inc.evidence?.runbooks ?? []).map((r) =>
+    typeof r === "string" ? { title: r } : r,
+  );
+  const runbooksWithBody = runbooks.filter((r) => r.body);
+
   return (
     <>
       <p className="muted" style={{ marginBottom: 6 }}><Link to="/incidents">← Incidents</Link></p>
@@ -90,6 +96,38 @@ export default function IncidentDetail() {
         </div>
       )}
 
+      {/* 권장 조치 (룰/Runbook 기반) — AI 진단이 없을 때(LLM 실패 등) 결정적 해결책을 제공 */}
+      {!inc.diagnosis && (
+        <div className="section">
+          <h3>권장 조치 <span className="tag">룰 · Runbook 기반</span></h3>
+          <p className="muted" style={{ fontSize: 12, marginTop: -6, marginBottom: 12 }}>
+            ⚠️ AI 진단(LLM)이 생성되지 않아 자동 RCA가 없습니다. 아래는 결정적 <b>룰 분류</b>와 매칭된 <b>Runbook</b>에 기반한 권장 조치입니다.
+          </p>
+          {inc.rule && inc.rule.category !== "Unknown" && (
+            <p style={{ marginTop: 0 }}>
+              <span className="badge info">분류: {inc.rule.category}</span>{" "}
+              {inc.rule.rationale && <span className="muted">{inc.rule.rationale}</span>}
+            </p>
+          )}
+          {runbooksWithBody.length > 0 ? (
+            runbooksWithBody.map((rb, i) => (
+              <div key={i} style={{ marginTop: 10 }}>
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>📘 {rb.title}</div>
+                <div className="logs">
+                  {rb.body!.split("\n").map((ln, j) => (
+                    <div key={j} style={ln.startsWith("## ") ? { color: "var(--text)", fontWeight: 600, marginTop: 6 } : undefined}>
+                      {ln.replace(/^##\s*/, "")}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="muted">매칭된 Runbook 본문이 없습니다. 위 근거(Events/Metrics)를 검토해 수동 조치하세요. (백엔드 재분석 시 Runbook 조치가 채워집니다.)</p>
+          )}
+        </div>
+      )}
+
       {/* Evidence */}
       {inc.evidence && (
         <div className="section">
@@ -107,10 +145,10 @@ export default function IncidentDetail() {
           {inc.evidence.gitContext && (
             <p className="mono muted">git: {inc.evidence.gitContext.repo}/{inc.evidence.gitContext.path} @ {inc.evidence.gitContext.lastCommit}</p>
           )}
-          {inc.evidence.runbooks && inc.evidence.runbooks.length > 0 && (
+          {runbooks.length > 0 && (
             <>
               <p className="k muted" style={{ margin: "0 0 4px" }}>매칭된 Runbook</p>
-              <div>{inc.evidence.runbooks.map((r, i) => <span key={i} className="badge ok" style={{ marginRight: 6 }}>📘 {r}</span>)}</div>
+              <div>{runbooks.map((r, i) => <span key={i} className="badge ok" style={{ marginRight: 6 }}>📘 {r.title}</span>)}</div>
             </>
           )}
           {inc.evidence.resourceStatus && Object.keys(inc.evidence.resourceStatus).length > 0 && (
