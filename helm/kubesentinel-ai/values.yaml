@@ -4,6 +4,10 @@
 
 replicaCount: 1
 
+# 보관할 이전 ReplicaSet 개수(롤백/이력용). N개 old + 현재 1개가 남는다.
+# 2 → ArgoCD/kubectl에 현재 포함 최근 3개 RS만 표시(오래된 RS는 자동 정리).
+revisionHistoryLimit: 2
+
 image:
   repository: ghcr.io/your-org/kubesentinel-ai
   # tag 미지정 시 Chart.appVersion 사용

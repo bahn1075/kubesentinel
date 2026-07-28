@@ -6,6 +6,7 @@ metadata:
   labels:
     {{- include "kubesentinel-ai.frontend.labels" . | nindent 4 }}
 spec:
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   replicas: {{ .Values.frontend.replicaCount }}
   selector:
     matchLabels:

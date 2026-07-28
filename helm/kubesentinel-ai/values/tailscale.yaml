@@ -2,15 +2,17 @@
 # 결과 주소: https://<tailscaleHostname>.<tailnet>.ts.net
 # helm ... -f values.yaml -f values/tailscale.yaml
 # OKE는 cri-o라 short-name enforcing → 레지스트리 포함 FQN 필수
+# 이미지 태그는 날짜(YYYYMMDDHHMM)로 고정한다(불변 태그 → GitOps로 변경 추적).
+# 신규 배포 시: 이미지 빌드·push 후 아래 tag를 새 태그로 갱신 → commit → ArgoCD 자동 동기화.
 image:
   repository: docker.io/bahn1075/kubesentinel-ai
-  tag: latest
-  pullPolicy: Always
+  tag: "202607280928"
+  pullPolicy: IfNotPresent
 frontend:
   image:
     repository: docker.io/bahn1075/kubesentinel-ai-front
-    tag: latest
-    pullPolicy: Always
+    tag: "202607280930"
+    pullPolicy: IfNotPresent
 
 ai:
   endpoint: "http://lm-studio-mac:1234/v1"
