@@ -18,7 +18,102 @@ func (e *Enricher) probe(b *models.EvidenceBundle) {
 	switch b.Rule.Category {
 	case "ImagePullBackOff":
 		b.ProbeFindings = append(b.ProbeFindings, e.probeImagePull(b)...)
+	case "CrashLoopBackOff":
+		b.ProbeFindings = append(b.ProbeFindings, e.probeCrashLoop(b)...)
+	case "OOMKilled":
+		b.ProbeFindings = append(b.ProbeFindings, e.probeOOM(b)...)
+	case "Unschedulable":
+		b.ProbeFindings = append(b.ProbeFindings, e.probeUnschedulable(b)...)
 	}
+}
+
+// probeCrashLoop은 컨테이너의 종료코드/사유를 뽑아 재시작 원인을 구체화한다.
+func (e *Enricher) probeCrashLoop(b *models.EvidenceBundle) []string {
+	if e.kube == nil || b.Pod == "" {
+		return nil
+	}
+	var out []string
+	for _, c := range e.kube.PodContainers(b.Namespace, b.Pod) {
+		if f := crashLoopFinding(c); f != "" {
+			out = append(out, f)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	// 로그가 이미 수집돼 있으면 종료 직전 로그를 함께 보라고 안내
+	if len(b.Logs) > 0 {
+		out = append(out, "probe(CrashLoop): 위 종료코드와 함께 수집된 최근 로그(logs)를 대조해 근본 원인을 특정하세요.")
+	}
+	return out
+}
+
+// probeOOM은 OOMKilled 컨테이너의 메모리 limit을 근거로 상향/누수 조치를 제시한다.
+func (e *Enricher) probeOOM(b *models.EvidenceBundle) []string {
+	if e.kube == nil || b.Pod == "" {
+		return nil
+	}
+	var out []string
+	for _, c := range e.kube.PodContainers(b.Namespace, b.Pod) {
+		if c.TerminatedReason == "OOMKilled" || c.LastTerminatedReason == "OOMKilled" {
+			out = append(out, fmt.Sprintf(
+				"probe(OOM): ⚠️ 컨테이너 %s OOMKilled (재시작 %d회). memory limit=%s, request=%s. 조치: 워킹셋이 지속 초과면 limit 상향, 급증/누수면 앱 메모리 프로파일링.",
+				c.Name, c.RestartCount, orNone(c.MemLimit), orNone(c.MemRequest)))
+		}
+	}
+	return out
+}
+
+// probeUnschedulable은 스케줄러의 FailedScheduling 사유(결정론적)와 노드 arch/taint를 함께 제시한다.
+func (e *Enricher) probeUnschedulable(b *models.EvidenceBundle) []string {
+	var out []string
+	for _, ev := range b.Events {
+		if strings.Contains(ev, "FailedScheduling") || strings.Contains(strings.ToLower(ev), "unschedulable") {
+			out = append(out, "probe(Unschedulable): 스케줄러 사유 — "+strings.TrimSpace(ev))
+			break
+		}
+	}
+	if e.kube != nil {
+		if info := e.kube.NodeInfoSummary(); len(info) > 0 {
+			out = append(out, "probe(Unschedulable): 노드 현황 — "+info[0]) // 첫 줄 = arch 요약
+		}
+	}
+	if len(out) > 0 {
+		out = append(out, "probe(Unschedulable): 위 사유에 따라 조치 — 리소스 부족이면 요청량 하향/노드 증설, taint면 toleration 추가, nodeSelector/affinity면 라벨 확인.")
+	}
+	return out
+}
+
+// crashLoopFinding은 컨테이너 진단에서 재시작/종료 원인 한 줄을 만든다(해당 없으면 "").
+func crashLoopFinding(c ContainerDiag) string {
+	reason := c.TerminatedReason
+	code := c.TerminatedExitCode
+	if reason == "" && c.LastTerminatedReason != "" {
+		reason, code = c.LastTerminatedReason, c.LastTerminatedExitCode
+	}
+	if reason == "" && c.RestartCount == 0 {
+		return ""
+	}
+	hint := ""
+	switch {
+	case code == 137 || reason == "OOMKilled":
+		hint = " (137/OOM → 메모리 부족 가능: limit 상향/누수 점검)"
+	case code == 143:
+		hint = " (143 → SIGTERM 종료)"
+	case code == 1 || code == 2:
+		hint = " (앱 오류: 설정/시크릿/환경변수 또는 코드 예외 — 직전 로그 확인)"
+	case code == 127:
+		hint = " (127 → 명령/바이너리 없음: entrypoint/이미지 확인)"
+	}
+	return fmt.Sprintf("probe(CrashLoop): 컨테이너 %s 재시작 %d회, 직전 종료 reason=%s exitCode=%d%s",
+		c.Name, c.RestartCount, orNone(reason), code, hint)
+}
+
+func orNone(s string) string {
+	if s == "" || s == "0" {
+		return "(none)"
+	}
+	return s
 }
 
 var rePullImage = regexp.MustCompile(`(?:pulling image|image)\s+"([^"]+)"`)

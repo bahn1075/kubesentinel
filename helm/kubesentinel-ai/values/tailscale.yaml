@@ -6,7 +6,7 @@
 # 신규 배포 시: 이미지 빌드·push 후 아래 tag를 새 태그로 갱신 → commit → ArgoCD 자동 동기화.
 image:
   repository: docker.io/bahn1075/kubesentinel-ai
-  tag: "202607281420"
+  tag: "202607281436"
   pullPolicy: IfNotPresent
 frontend:
   image:
@@ -16,7 +16,8 @@ frontend:
 
 ai:
   endpoint: "http://lm-studio-mac:1234/v1"
-  model: "gemma-4-26b-a4b-it-mlx"
+  # LM Studio에 현재 로드된 모델명과 일치시킨다(불일치 시 /api/ai/health 의 modelAvailable=false).
+  model: "gemma-4-31b-it-qat-optiq"
 
 tailnetEgress:
   lmStudio:

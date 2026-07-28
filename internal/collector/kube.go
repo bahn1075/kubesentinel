@@ -170,6 +170,63 @@ func (k *KubeCollector) NodeInfoSummary() []string {
 	return out
 }
 
+// ContainerDiag는 컨테이너의 진단 신호(종료코드/사유/재시작/리소스)를 담는다. (프로브용)
+type ContainerDiag struct {
+	Name                   string
+	Image                  string
+	RestartCount           int32
+	WaitingReason          string
+	TerminatedReason       string
+	TerminatedExitCode     int32
+	LastTerminatedReason   string
+	LastTerminatedExitCode int32
+	MemLimit               string
+	MemRequest             string
+	CPURequest             string
+}
+
+// PodContainers는 파드 컨테이너의 상태·리소스 신호를 반환한다(프로브용). 없으면 nil.
+func (k *KubeCollector) PodContainers(ns, pod string) []ContainerDiag {
+	if k == nil || ns == "" || pod == "" {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	p, err := k.cs.CoreV1().Pods(ns).Get(ctx, pod, metav1.GetOptions{})
+	if err != nil {
+		return nil
+	}
+	// spec의 리소스 요청/제한을 컨테이너명으로 인덱싱
+	reqLim := map[string][3]string{} // name → {memLimit, memReq, cpuReq}
+	for _, c := range append(append([]corev1.Container{}, p.Spec.InitContainers...), p.Spec.Containers...) {
+		ml := c.Resources.Limits.Memory().String()
+		mr := c.Resources.Requests.Memory().String()
+		cr := c.Resources.Requests.Cpu().String()
+		reqLim[c.Name] = [3]string{ml, mr, cr}
+	}
+	var out []ContainerDiag
+	statuses := append(append([]corev1.ContainerStatus{}, p.Status.InitContainerStatuses...), p.Status.ContainerStatuses...)
+	for _, cs := range statuses {
+		d := ContainerDiag{Name: cs.Name, Image: cs.Image, RestartCount: cs.RestartCount}
+		if cs.State.Waiting != nil {
+			d.WaitingReason = cs.State.Waiting.Reason
+		}
+		if cs.State.Terminated != nil {
+			d.TerminatedReason = cs.State.Terminated.Reason
+			d.TerminatedExitCode = cs.State.Terminated.ExitCode
+		}
+		if cs.LastTerminationState.Terminated != nil {
+			d.LastTerminatedReason = cs.LastTerminationState.Terminated.Reason
+			d.LastTerminatedExitCode = cs.LastTerminationState.Terminated.ExitCode
+		}
+		if rl, ok := reqLim[cs.Name]; ok {
+			d.MemLimit, d.MemRequest, d.CPURequest = rl[0], rl[1], rl[2]
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
 // PodImages는 파드(및 대체로 잡의 첫 파드) 컨테이너 이미지 목록을 반환한다(init 포함). (프로브/도구용)
 func (k *KubeCollector) PodImages(ns, pod string) []string {
 	if k == nil || ns == "" || pod == "" {

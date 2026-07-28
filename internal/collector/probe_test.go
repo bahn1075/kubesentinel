@@ -2,6 +2,7 @@ package collector
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -17,7 +18,7 @@ func TestParseDockerRef(t *testing.T) {
 		{"bahn1075/helm-update", "bahn1075/helm-update", "latest", true},
 		{"nginx", "library/nginx", "latest", true},
 		{"nginx:1.27", "library/nginx", "1.27", true},
-		{"ghcr.io/org/app:1.0", "", "", false},       // 비-docker.io 미지원
+		{"ghcr.io/org/app:1.0", "", "", false},           // 비-docker.io 미지원
 		{"registry.example.com:5000/x:1", "", "", false}, // 포트 있는 호스트
 	}
 	for _, c := range cases {
@@ -34,6 +35,21 @@ func TestArchSet(t *testing.T) {
 	want := []string{"amd64", "arm64"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("archSet = %v, want %v", got, want)
+	}
+}
+
+func TestCrashLoopFinding(t *testing.T) {
+	// OOM(137) 힌트
+	if f := crashLoopFinding(ContainerDiag{Name: "app", RestartCount: 5, LastTerminatedReason: "Error", LastTerminatedExitCode: 137}); !strings.Contains(f, "OOM") {
+		t.Errorf("expected OOM hint for exit 137, got %q", f)
+	}
+	// 앱 오류(1)
+	if f := crashLoopFinding(ContainerDiag{Name: "app", RestartCount: 3, TerminatedReason: "Error", TerminatedExitCode: 1}); !strings.Contains(f, "앱 오류") {
+		t.Errorf("expected app-error hint for exit 1, got %q", f)
+	}
+	// 재시작 없고 종료도 없으면 빈 문자열
+	if f := crashLoopFinding(ContainerDiag{Name: "app"}); f != "" {
+		t.Errorf("expected empty finding for healthy container, got %q", f)
 	}
 }
 
