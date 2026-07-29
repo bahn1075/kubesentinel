@@ -7,6 +7,7 @@ const NAV = [
   { to: "/incidents", label: "Incidents" },
   { to: "/approvals", label: "Approvals", soon: true },
   { to: "/policies", label: "Policies" },
+  { to: "/ignores", label: "무시 규칙" },
   { to: "/settings", label: "Settings" },
 ];
 

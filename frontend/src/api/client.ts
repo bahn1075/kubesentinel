@@ -1,4 +1,4 @@
-import type { Incident, RemediationPolicy, ProviderSettings } from "./types";
+import type { Incident, RemediationPolicy, ProviderSettings, IgnoreRule, IgnoreList } from "./types";
 import { mockIncidents, mockPolicies, mockSettings } from "./mock";
 
 // 백엔드 API가 아직 없으므로 기본은 MOCK 모드.
@@ -21,6 +21,30 @@ async function putJSON<T>(path: string, body: unknown): Promise<T> {
   });
   if (!res.ok) throw new Error(`API ${path} → ${res.status}`);
   return res.json() as Promise<T>;
+}
+
+async function sendJSON<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(`API ${method} ${path} → ${res.status}`);
+  return (res.status === 204 ? undefined : res.json()) as Promise<T>;
+}
+
+// ── 무시 규칙 (Ignore rules) ──
+export async function fetchIgnores(): Promise<IgnoreList> {
+  return getJSON<IgnoreList>("/ignores");
+}
+export async function addIgnore(keyword: string): Promise<IgnoreRule> {
+  return sendJSON<IgnoreRule>("POST", "/ignores", { keyword });
+}
+export async function setIgnoreEnabled(id: number, enabled: boolean): Promise<void> {
+  await sendJSON("PATCH", `/ignores/${id}`, { enabled });
+}
+export async function deleteIgnore(id: number): Promise<void> {
+  await sendJSON("DELETE", `/ignores/${id}`);
 }
 
 // Incidents는 백엔드(DB)에서 조회한다. 백엔드가 없으면 mock으로 폴백(dev 편의).

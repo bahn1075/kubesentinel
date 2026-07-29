@@ -43,6 +43,18 @@ func (s *WebhookServer) processBundle(b *models.EvidenceBundle) {
 	}
 }
 
+// labelsHaystack은 무시 규칙 매칭용 문자열(모든 라벨/주석 값 — alert명·대상·job 등 포함)을 만든다.
+func labelsHaystack(labels, annotations models.Labels) string {
+	parts := make([]string, 0, len(labels)+len(annotations))
+	for _, v := range labels {
+		parts = append(parts, v)
+	}
+	for _, v := range annotations {
+		parts = append(parts, v)
+	}
+	return strings.Join(parts, " ")
+}
+
 // amV2Alert는 Alertmanager v2 API(GET /api/v2/alerts)의 alert 항목입니다.
 type amV2Alert struct {
 	Labels       models.Labels `json:"labels"`
@@ -86,8 +98,8 @@ func (s *WebhookServer) StartAlertmanagerPoller() {
 			if a.Labels["alertname"] == "Watchdog" || (sev != "warning" && sev != "critical") {
 				continue // 노이즈 제외 (warning/critical만)
 			}
-			if s.isIgnored(a.Labels["alertname"]) {
-				continue // 무시 목록 alert는 인시던트로 처리하지 않음
+			if s.shouldIgnore(a.Labels["alertname"], labelsHaystack(a.Labels, a.Annotations)) {
+				continue // 무시 규칙에 걸리는 alert는 인시던트로 처리하지 않음
 			}
 			if seen[a.Fingerprint] {
 				continue // 이미 처리한 firing alert

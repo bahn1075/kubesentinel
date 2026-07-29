@@ -9,6 +9,8 @@ import (
 	"kubesentinel-ai/internal/notifier"
 	"kubesentinel-ai/internal/store"
 	"net/http"
+	"strings"
+	"sync"
 )
 
 // WebhookServer는 HTTP 요청을 수신하는 서버입니다.
@@ -24,13 +26,56 @@ type WebhookServer struct {
 	AlertmanagerURL string
 	PollIntervalSec int
 
-	// IgnoreAlerts는 인시던트로 처리하지 않을 alertname 집합이다(예: KubeCPUOvercommit).
+	// IgnoreAlerts는 설정(values/env)로 고정된 무시 alertname 집합이다(선언적 baseline, exact match).
 	IgnoreAlerts map[string]bool
+
+	// ignoreRules는 사용자 관리(DB) 무시 규칙 캐시다(keyword 부분일치). API 변경 시 갱신된다.
+	ignoreMu    sync.RWMutex
+	ignoreRules []models.IgnoreRule
 }
 
-// isIgnored는 해당 alertname이 무시 목록에 있는지 판단한다.
-func (s *WebhookServer) isIgnored(alertname string) bool {
-	return s.IgnoreAlerts != nil && s.IgnoreAlerts[alertname]
+// RefreshIgnoreRules는 DB의 무시 규칙을 캐시에 다시 로드한다(기동 시 + API 변경 시).
+func (s *WebhookServer) RefreshIgnoreRules() {
+	if s.Store == nil {
+		return
+	}
+	rules, err := s.Store.ListIgnoreRules()
+	if err != nil {
+		fmt.Printf("[KubeSentinel] ⚠️  failed to load ignore rules: %v\n", err)
+		return
+	}
+	s.ignoreMu.Lock()
+	s.ignoreRules = rules
+	s.ignoreMu.Unlock()
+}
+
+// bundleHaystack은 무시 규칙 매칭용 문자열(alert명 + 대상: 네임스페이스/워크로드/파드 + 주석)을 만든다.
+func bundleHaystack(b *models.EvidenceBundle) string {
+	parts := []string{b.Alert, b.Namespace, b.Workload, b.Pod}
+	for _, v := range b.Annotations {
+		parts = append(parts, v)
+	}
+	return strings.Join(parts, " ")
+}
+
+// shouldIgnore는 alert명 또는 대상(haystack)이 무시 대상인지 판단한다.
+// 설정 baseline(alertname exact) + 사용자 규칙(enabled keyword 부분일치, 대소문자 무시).
+func (s *WebhookServer) shouldIgnore(alertname, haystack string) bool {
+	if s.IgnoreAlerts != nil && s.IgnoreAlerts[alertname] {
+		return true
+	}
+	hay := strings.ToLower(haystack)
+	s.ignoreMu.RLock()
+	defer s.ignoreMu.RUnlock()
+	for _, r := range s.ignoreRules {
+		if !r.Enabled {
+			continue
+		}
+		if kw := strings.ToLower(strings.TrimSpace(r.Keyword)); kw != "" && strings.Contains(hay, kw) {
+			return true
+		}
+	}
+	return false
 }
 
 // NewWebhookServer는 새로운 WebhookServer 인스턴스를 생성합니다.
@@ -53,6 +98,8 @@ func (s *WebhookServer) Start() error {
 	mux.HandleFunc("/api/secrets", s.handleSecrets)
 	mux.HandleFunc("/api/incidents", s.handleIncidents)
 	mux.HandleFunc("/api/incidents/", s.handleIncidentDetail)
+	mux.HandleFunc("/api/ignores", s.handleIgnores)
+	mux.HandleFunc("/api/ignores/", s.handleIgnoreDetail)
 	mux.HandleFunc("/api/ai/status", s.handleAIStatus)
 	mux.HandleFunc("/api/ai/health", s.handleAIHealth)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
@@ -80,8 +127,8 @@ func (s *WebhookServer) handleAlertmanagerWebhook(w http.ResponseWriter, r *http
 		http.Error(w, "Failed to create evidence bundle", http.StatusBadRequest)
 		return
 	}
-	// 무시 목록의 alert는 인시던트로 처리하지 않는다(200으로 정상 수신만).
-	if s.isIgnored(bundle.Alert) {
+	// 무시 규칙에 걸리는 alert는 인시던트로 처리하지 않는다(200으로 정상 수신만).
+	if s.shouldIgnore(bundle.Alert, bundleHaystack(bundle)) {
 		fmt.Printf("[KubeSentinel] ⏭️  ignored alert (not processed): %s\n", bundle.Alert)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ignored"))

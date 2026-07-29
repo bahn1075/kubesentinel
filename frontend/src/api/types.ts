@@ -67,6 +67,19 @@ export interface RunbookRef {
   body?: string;
 }
 
+// 무시 규칙 (인시던트로 처리하지 않을 keyword — alert명/대상 부분일치)
+export interface IgnoreRule {
+  id: number;
+  keyword: string;
+  enabled: boolean;
+  createdAt: string;
+}
+
+export interface IgnoreList {
+  rules: IgnoreRule[];
+  config: string[]; // 설정(values/env)로 고정된 무시 alertname (읽기 전용)
+}
+
 export interface Incident {
   incidentId: string;
   alert: string;

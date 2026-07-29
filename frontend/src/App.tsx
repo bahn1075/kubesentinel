@@ -5,6 +5,7 @@ import Incidents from "./pages/Incidents";
 import IncidentDetail from "./pages/IncidentDetail";
 import Approvals from "./pages/Approvals";
 import Policies from "./pages/Policies";
+import IgnoreRules from "./pages/IgnoreRules";
 import Settings from "./pages/Settings";
 
 export default function App() {
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="/incidents/:id" element={<IncidentDetail />} />
         <Route path="/approvals" element={<Approvals />} />
         <Route path="/policies" element={<Policies />} />
+        <Route path="/ignores" element={<IgnoreRules />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<p>페이지를 찾을 수 없습니다.</p>} />
       </Routes>

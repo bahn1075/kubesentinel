@@ -6,7 +6,7 @@
 # 신규 배포 시: 이미지 빌드·push 후 아래 tag를 새 태그로 갱신 → commit → ArgoCD 자동 동기화.
 image:
   repository: docker.io/bahn1075/kubesentinel-ai
-  tag: "202607290920"
+  tag: "202607290950"
   pullPolicy: IfNotPresent
 
 # 인시던트로 처리하지 않을 alert (상시 warning 노이즈 제외)
@@ -16,7 +16,7 @@ collector:
 frontend:
   image:
     repository: docker.io/bahn1075/kubesentinel-ai-front
-    tag: "202607281421"
+    tag: "202607290951"
     pullPolicy: IfNotPresent
 
 ai:
