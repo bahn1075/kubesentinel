@@ -23,6 +23,14 @@ type WebhookServer struct {
 	// Alertmanager 폴링 (pull) — URL 설정 시에만 활성
 	AlertmanagerURL string
 	PollIntervalSec int
+
+	// IgnoreAlerts는 인시던트로 처리하지 않을 alertname 집합이다(예: KubeCPUOvercommit).
+	IgnoreAlerts map[string]bool
+}
+
+// isIgnored는 해당 alertname이 무시 목록에 있는지 판단한다.
+func (s *WebhookServer) isIgnored(alertname string) bool {
+	return s.IgnoreAlerts != nil && s.IgnoreAlerts[alertname]
 }
 
 // NewWebhookServer는 새로운 WebhookServer 인스턴스를 생성합니다.
@@ -70,6 +78,13 @@ func (s *WebhookServer) handleAlertmanagerWebhook(w http.ResponseWriter, r *http
 	bundle := models.NewEvidenceBundle(payload)
 	if bundle == nil {
 		http.Error(w, "Failed to create evidence bundle", http.StatusBadRequest)
+		return
+	}
+	// 무시 목록의 alert는 인시던트로 처리하지 않는다(200으로 정상 수신만).
+	if s.isIgnored(bundle.Alert) {
+		fmt.Printf("[KubeSentinel] ⏭️  ignored alert (not processed): %s\n", bundle.Alert)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ignored"))
 		return
 	}
 	// 상관 컨텍스트: 같은 알림 그룹의 나머지 alert (webhook은 그룹 범위로 제한됨)

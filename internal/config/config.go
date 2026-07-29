@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 // Config는 KubeSentinel AI의 전체 시스템 설정을 담는 루트 구조체입니다.
@@ -31,6 +32,8 @@ type CollectorConfig struct {
 	LogLines        int    `yaml:"log_lines"`         // Loki에서 가져올 최근 로그 라인 수
 	PollIntervalSec int    `yaml:"poll_interval_sec"` // Alertmanager 폴링 주기(초)
 	RunbookDir      string `yaml:"runbook_dir"`       // runbook markdown 디렉토리(ConfigMap 마운트)
+	// IgnoreAlerts는 인시던트로 처리하지 않을 alertname 목록이다(노이즈/의도적 상시 warning 제외).
+	IgnoreAlerts []string `yaml:"ignore_alerts"`
 }
 
 // AppConfig는 애플리케이션 자체의 기본 설정을 담습니다.
@@ -126,6 +129,15 @@ func LoadConfig() (*Config, error) {
 	}
 	if val := os.Getenv("KUBESENTINEL_AI_DATABASE_URL"); val != "" {
 		cfg.Database.URL = val
+	}
+	if val := os.Getenv("KUBESENTINEL_AI_IGNORE_ALERTS"); val != "" {
+		var out []string
+		for _, p := range strings.Split(val, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				out = append(out, p)
+			}
+		}
+		cfg.Collector.IgnoreAlerts = out
 	}
 
 	// 검증 (Validation)

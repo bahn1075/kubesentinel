@@ -86,6 +86,9 @@ func (s *WebhookServer) StartAlertmanagerPoller() {
 			if a.Labels["alertname"] == "Watchdog" || (sev != "warning" && sev != "critical") {
 				continue // 노이즈 제외 (warning/critical만)
 			}
+			if s.isIgnored(a.Labels["alertname"]) {
+				continue // 무시 목록 alert는 인시던트로 처리하지 않음
+			}
 			if seen[a.Fingerprint] {
 				continue // 이미 처리한 firing alert
 			}

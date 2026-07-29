@@ -43,6 +43,8 @@ collector:
   lokiUrl: ""           # 예: http://loki-gateway.monitoring.svc:80
   grafanaUrl: ""        # 알림 딥링크용(선택)
   logLines: 50
+  # 인시던트로 처리하지 않을 alertname 목록(노이즈/의도적 상시 warning 제외).
+  ignoreAlerts: []      # 예: ["KubeCPUOvercommit"]
 
 # ── Notifier (architecture.md §4.7) ───────────────────────────────
 notifier:

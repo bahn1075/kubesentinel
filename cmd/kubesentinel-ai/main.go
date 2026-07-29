@@ -70,6 +70,14 @@ func main() {
 
 	// 4. Webhook/API Server
 	server := collector.NewWebhookServer(fmt.Sprintf("%d", cfg.App.Port), engine, enricher, notify, st, cfg.AI)
+	// 인시던트로 처리하지 않을 alert 목록(예: KubeCPUOvercommit) 주입
+	if len(cfg.Collector.IgnoreAlerts) > 0 {
+		server.IgnoreAlerts = map[string]bool{}
+		for _, a := range cfg.Collector.IgnoreAlerts {
+			server.IgnoreAlerts[a] = true
+		}
+		fmt.Printf("Ignoring alerts (not processed as incidents): %v\n", cfg.Collector.IgnoreAlerts)
+	}
 	go func() {
 		if err := server.Start(); err != nil {
 			log.Fatalf("Webhook server failed to start: %v", err)

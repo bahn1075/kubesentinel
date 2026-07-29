@@ -49,6 +49,10 @@ spec:
               value: {{ .Values.collector.grafanaUrl | quote }}
             - name: KUBESENTINEL_AI_NOTIFIER_TYPE
               value: {{ .Values.notifier.type | quote }}
+            {{- if .Values.collector.ignoreAlerts }}
+            - name: KUBESENTINEL_AI_IGNORE_ALERTS
+              value: {{ join "," .Values.collector.ignoreAlerts | quote }}
+            {{- end }}
             # ── 민감정보: Secret 참조 (키 없으면 optional로 무시) ──
             - name: KUBESENTINEL_AI_API_KEY
               valueFrom:
