@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 )
@@ -29,13 +30,31 @@ func (s *WebhookServer) handleIncidentDetail(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "store not configured (DATABASE_URL 미설정)", http.StatusServiceUnavailable)
 		return
 	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
 	id := strings.TrimPrefix(r.URL.Path, "/api/incidents/")
 	if id == "" {
 		http.Error(w, "incident id required", http.StatusBadRequest)
+		return
+	}
+
+	// PATCH: 확인됨(acknowledged) 토글 — 확인됨이면 목록에서 숨겨진다.
+	if r.Method == http.MethodPatch {
+		var in struct {
+			Acknowledged bool `json:"acknowledged"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		if err := s.Store.AcknowledgeIncident(id, in.Acknowledged); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	raw, err := s.Store.GetIncident(id)

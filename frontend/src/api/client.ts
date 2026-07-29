@@ -33,6 +33,11 @@ async function sendJSON<T>(method: string, path: string, body?: unknown): Promis
   return (res.status === 204 ? undefined : res.json()) as Promise<T>;
 }
 
+// 인시던트 확인됨(acknowledged) 처리 — 확인됨이면 목록에서 숨겨진다.
+export async function acknowledgeIncident(id: string, acknowledged = true): Promise<void> {
+  await sendJSON("PATCH", `/incidents/${encodeURIComponent(id)}`, { acknowledged });
+}
+
 // ── 무시 규칙 (Ignore rules) ──
 export async function fetchIgnores(): Promise<IgnoreList> {
   return getJSON<IgnoreList>("/ignores");

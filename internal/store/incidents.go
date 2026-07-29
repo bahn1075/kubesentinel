@@ -30,7 +30,7 @@ func (s *Store) ListIncidents(limit int) ([]json.RawMessage, error) {
 	if limit <= 0 {
 		limit = 100
 	}
-	rows, err := s.db.Query(`SELECT data FROM incidents ORDER BY created_at DESC LIMIT $1`, limit)
+	rows, err := s.db.Query(`SELECT data FROM incidents WHERE NOT acknowledged ORDER BY created_at DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list incidents: %w", err)
 	}
@@ -45,6 +45,18 @@ func (s *Store) ListIncidents(limit int) ([]json.RawMessage, error) {
 		out = append(out, json.RawMessage(raw))
 	}
 	return out, rows.Err()
+}
+
+// AcknowledgeIncident는 인시던트의 확인됨 여부를 설정합니다(확인됨이면 기본 목록에서 숨김).
+func (s *Store) AcknowledgeIncident(id string, ack bool) error {
+	res, err := s.db.Exec(`UPDATE incidents SET acknowledged = $2 WHERE incident_id = $1`, id, ack)
+	if err != nil {
+		return fmt.Errorf("acknowledge incident: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("incident not found: %s", id)
+	}
+	return nil
 }
 
 // GetIncident는 단일 인시던트 JSON을 반환합니다. 없으면 (nil, nil).
