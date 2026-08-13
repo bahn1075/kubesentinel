@@ -16,7 +16,7 @@ collector:
 frontend:
   image:
     repository: docker.io/bahn1075/kubesentinel-ai-front
-    tag: "202607291010"
+    tag: "202608131034"
     pullPolicy: IfNotPresent
 
 ai:

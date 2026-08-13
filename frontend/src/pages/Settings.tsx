@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { Info } from "@phosphor-icons/react";
 import type { ProviderSettings } from "../api/types";
 import {
   fetchSettings, saveSettings, fetchAIStatus, checkAIHealth,
   fetchSecretsStatus, saveSecrets,
   type AIStatus, type AIHealth, type SecretsStatus,
 } from "../api/client";
+import Skeleton from "../components/Skeleton";
 
 // frontier provider별 기본 엔드포인트 (OpenAI 호환 base)
 const FRONTIER_ENDPOINTS: Record<string, string> = {
@@ -89,7 +91,7 @@ export default function Settings() {
   }
 
   if (loadErr) return <p className="test-result err">설정 로드 실패: {loadErr}</p>;
-  if (!s) return <p className="muted">로딩 중…</p>;
+  if (!s) return <Skeleton title rows={8} />;
 
   const isLocal = s.ai.kind === "local";
   const isFrontier = s.ai.kind === "frontier";
@@ -112,7 +114,7 @@ export default function Settings() {
           {isFrontier && <>
             <label>제공자</label>
             <select value={s.ai.provider} onChange={(e) => onChangeProvider(e.target.value)}>
-              <option value="">선택…</option>
+              <option value="">선택</option>
               <option value="openai">OpenAI</option>
               <option value="anthropic">Anthropic</option>
               <option value="azure-openai">Azure OpenAI</option>
@@ -129,7 +131,7 @@ export default function Settings() {
 
             {s.ai.authMethod === "api-key" && <>
               <label>API Key</label>
-              <input type="password" placeholder={secretsSet.aiApiKey ? "설정됨 — 변경 시 새 값 입력" : "sk-..."}
+              <input type="password" placeholder={secretsSet.aiApiKey ? "설정됨 (변경 시 새 값 입력)" : "sk-..."}
                 value={aiApiKeyInput} onChange={(e) => { setAiApiKeyInput(e.target.value); setSaved(false); }} />
             </>}
             {s.ai.authMethod !== "api-key" && (
@@ -137,7 +139,7 @@ export default function Settings() {
             )}
           </>}
 
-          <label>Endpoint{isFrontier ? "" : ""}</label>
+          <label>Endpoint</label>
           <input value={s.ai.endpoint} placeholder={isLocal ? "http://host.minikube.internal:1234/v1" : "https://api.openai.com/v1"}
             onChange={(e) => update("ai", { endpoint: e.target.value })} />
 
@@ -148,7 +150,7 @@ export default function Settings() {
           <label>상태 확인</label>
           <div>
             <button onClick={onCheckHealth} disabled={checking || !s.ai.endpoint}>
-              {checking ? "조회 중…" : "상태 확인 (모델 조회)"}
+              {checking ? "조회 중" : "상태 확인 (모델 조회)"}
             </button>
           </div>
 
@@ -161,19 +163,19 @@ export default function Settings() {
         {healthErr && <div className="test-result err">연결 실패: {healthErr}</div>}
         {health && (health.healthy ? (
           <div className="test-result ok">
-            <strong>연결 성공</strong> ({health.latencyMs}ms) — {health.models.length}개 모델 (클릭하면 Model에 적용):
+            <strong>연결 성공</strong> ({health.latencyMs}ms) · {health.models.length}개 모델. 클릭하면 Model에 적용됩니다.
             <div className="model-chips">
               {health.models.map((m) => (
                 <button key={m} type="button" className={`model-chip ${m === s.ai.model ? "active" : ""}`}
-                  onClick={() => update("ai", { model: m })}>{m}{m === s.ai.model ? " ✓" : ""}</button>
+                  onClick={() => update("ai", { model: m })}>{m}</button>
               ))}
             </div>
           </div>
         ) : <div className="test-result err">연결 실패: {health.error}</div>)}
 
         {status && (
-          <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-            현재 활성(백엔드): {status.providerName} · {status.model || "(모델 미설정)"} — 저장 후 백엔드 재시작 시 반영
+          <p className="muted" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
+            현재 활성(백엔드): {status.providerName} · {status.model || "(모델 미설정)"}. 저장 후 백엔드 재시작 시 반영됩니다.
           </p>
         )}
       </div>
@@ -195,10 +197,13 @@ export default function Settings() {
           <input value={s.collector.grafanaUrl} placeholder="(선택) 알림 딥링크용"
             onChange={(e) => update("collector", { grafanaUrl: e.target.value })} />
         </div>
-        <div className="test-result" style={{ background: "var(--bg-elev2)" }}>
-          ℹ️ KubeSentinel은 Alertmanager의 <b>수신자</b>입니다. Alertmanager 설정에 아래 receiver를 추가하세요:
-          <div className="mono" style={{ marginTop: 6 }}>http://&lt;backend-svc&gt;.&lt;namespace&gt;.svc:8080/v1/alerts</div>
-          <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>위 Alertmanager URL은 추후 alert 상태 조회/검증에 사용됩니다(현재는 저장만).</div>
+        <div className="test-result" style={{ display: "flex", gap: 8 }}>
+          <Info size={16} color="var(--accent-text)" aria-hidden style={{ flex: "none", marginTop: 2 }} />
+          <div>
+            KubeSentinel은 Alertmanager의 <b>수신자</b>입니다. Alertmanager 설정에 아래 receiver를 추가하세요:
+            <div className="mono" style={{ marginTop: 6 }}>http://&lt;backend-svc&gt;.&lt;namespace&gt;.svc:8080/v1/alerts</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>위 Alertmanager URL은 추후 alert 상태 조회/검증에 사용됩니다(현재는 저장만).</div>
+          </div>
         </div>
       </div>
 
@@ -235,7 +240,7 @@ export default function Settings() {
 
           {s.git.authMethod === "token" && <>
             <label>Token</label>
-            <input type="password" placeholder={secretsSet.gitToken ? "설정됨 — 변경 시 새 값 입력" : "ghp_... / glpat-... / gitea token"}
+            <input type="password" placeholder={secretsSet.gitToken ? "설정됨 (변경 시 새 값 입력)" : "ghp_... / glpat-... / gitea token"}
               value={gitTokenInput} onChange={(e) => { setGitTokenInput(e.target.value); setSaved(false); }} />
           </>}
           {s.git.authMethod !== "token" && (
@@ -252,7 +257,7 @@ export default function Settings() {
       </div>
 
       <div className="btn-row" style={{ alignItems: "center" }}>
-        <button className="primary" onClick={onSave} disabled={saving}>{saving ? "저장 중…" : "저장"}</button>
+        <button className="primary" onClick={onSave} disabled={saving}>{saving ? "저장 중" : "저장"}</button>
         {saved && <span className="badge ok">저장되었습니다 (DB)</span>}
         {saveErr && <span className="badge crit">저장 실패: {saveErr}</span>}
       </div>

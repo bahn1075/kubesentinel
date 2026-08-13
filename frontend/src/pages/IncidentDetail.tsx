@@ -1,7 +1,9 @@
 import { useParams, Link } from "react-router-dom";
+import { Warning, BookOpen, ArrowLeft, ArrowSquareOut } from "@phosphor-icons/react";
 import { fetchIncident } from "../api/client";
 import { useAsync } from "../lib/useAsync";
 import { STATE_FLOW, severityClass, stateClass, riskClass, formatTime, isFailureState } from "../lib/format";
+import Skeleton from "../components/Skeleton";
 
 // 근거 품질 뱃지 (백엔드가 코드로 계산한 값)
 function evidenceBadge(q?: string) {
@@ -11,7 +13,7 @@ function evidenceBadge(q?: string) {
   return <span className="badge crit">근거 부족 · 조사용</span>; // none
 }
 
-// 자동 조사 프로브 결과 블록 (결정론적 근거 — arch 불일치/태그 없음 등을 강조)
+// 자동 조사 프로브 결과 블록 (결정론적 근거. arch 불일치/태그 없음 등을 강조)
 function ProbeBlock({ findings }: { findings: string[] }) {
   if (!findings.length) return null;
   return (
@@ -21,7 +23,7 @@ function ProbeBlock({ findings }: { findings: string[] }) {
         {findings.map((f, i) => {
           const alert = f.includes("⚠️") || f.includes("불일치") || f.includes("없음");
           return (
-            <div key={i} style={alert ? { color: "var(--crit)" } : undefined}>• {f}</div>
+            <div key={i} style={alert ? { color: "var(--crit-text)" } : undefined}>{f}</div>
           );
         })}
       </div>
@@ -33,8 +35,12 @@ export default function IncidentDetail() {
   const { id = "" } = useParams();
   const { data: inc, loading } = useAsync(() => fetchIncident(id), [id]);
 
-  if (loading) return <p className="muted">로딩 중…</p>;
-  if (!inc) return <p>인시던트를 찾을 수 없습니다. <Link to="/incidents">목록으로</Link></p>;
+  if (loading) return <Skeleton title rows={8} />;
+  if (!inc) return (
+    <div className="empty">
+      인시던트를 찾을 수 없습니다. <Link to="/incidents" style={{ color: "var(--accent-text)" }}>목록으로</Link>
+    </div>
+  );
 
   const currentIdx = STATE_FLOW.indexOf(inc.state);
 
@@ -47,7 +53,11 @@ export default function IncidentDetail() {
 
   return (
     <>
-      <p className="muted" style={{ marginBottom: 6 }}><Link to="/incidents">← Incidents</Link></p>
+      <p style={{ marginBottom: 8 }}>
+        <Link to="/incidents" className="muted" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <ArrowLeft size={14} aria-hidden /> Incidents
+        </Link>
+      </p>
       <h1 className="page-title">
         <code>{inc.alert}</code>{" "}
         <span className={`badge ${severityClass(inc.severity)}`}>{inc.severity}</span>{" "}
@@ -68,7 +78,7 @@ export default function IncidentDetail() {
               : idx < currentIdx ? "done" : idx === currentIdx ? "current" : "";
             return <span key={s} className={`step ${cls}`}>{s}</span>;
           })}
-          {isFailureState(inc.state) && <span className="step" style={{ color: "var(--crit)", borderColor: "#5a2a2a" }}>{inc.state}</span>}
+          {isFailureState(inc.state) && <span className="step failed">{inc.state}</span>}
         </div>
       </div>
 
@@ -80,15 +90,16 @@ export default function IncidentDetail() {
             <span className="k">Root Cause</span><span>{inc.diagnosis.rootCause}</span>
             <span className="k">Summary</span><span>{inc.diagnosis.summary}</span>
             <span className="k">Confidence</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span className="confidence-bar"><div style={{ width: `${inc.diagnosis.confidence * 100}%` }} /></span>
-              {Math.round(inc.diagnosis.confidence * 100)}%
+              <span className="mono">{Math.round(inc.diagnosis.confidence * 100)}%</span>
               {evidenceBadge(inc.diagnosis.evidenceQuality)}
             </span>
           </div>
           {inc.diagnosis.evidenceQuality && inc.diagnosis.evidenceQuality !== "rich" && (
-            <p className="muted" style={{ fontSize: 12, marginTop: -6, marginBottom: 12 }}>
-              ⚠️ 근거(metric/log/event)가 제한적이라 <b>조사용 진단</b>입니다. 아래 "동시 발생 alert"와 함께 검토하세요.
+            <p className="muted" style={{ fontSize: 12.5, marginTop: -6, marginBottom: 12, display: "flex", gap: 6 }}>
+              <Warning size={15} color="var(--warn)" aria-hidden style={{ flex: "none", marginTop: 2 }} />
+              <span>근거(metric/log/event)가 제한적이라 <b>조사용 진단</b>입니다. 아래 "동시 발생 alert"와 함께 검토하세요.</span>
             </p>
           )}
 
@@ -99,28 +110,35 @@ export default function IncidentDetail() {
                 <span className="badge dim">{a.type}</span>{" "}
                 <span className={`badge ${riskClass(a.risk)}`}>risk: {a.risk}</span>
                 <div style={{ marginTop: 6 }}>{a.description}</div>
-                {a.target && <div className="mono muted" style={{ marginTop: 4 }}>→ {a.target}</div>}
+                {a.target && <div className="mono muted" style={{ marginTop: 4 }}>대상: {a.target}</div>}
               </li>
             ))}
           </ul>
 
-          <div className="btn-row" style={{ marginTop: 12 }}>
+          <div className="btn-row" style={{ marginTop: 14 }}>
             <button className="primary" disabled title="MVP-2 예정">승인</button>
             <button disabled title="MVP-2 예정">반려</button>
-            {inc.prUrl && <a href={inc.prUrl} target="_blank" rel="noreferrer"><button>PR 열기 ↗</button></a>}
+            {inc.prUrl && (
+              <a href={inc.prUrl} target="_blank" rel="noreferrer">
+                <button style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  PR 열기 <ArrowSquareOut size={14} aria-hidden />
+                </button>
+              </a>
+            )}
           </div>
-          <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+          <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
             승인/반려 액션은 MVP-2에서 활성화됩니다. (architecture.md §4.7 / §7)
           </p>
         </div>
       )}
 
-      {/* 권장 조치 (룰/Runbook 기반) — AI 진단이 없을 때(LLM 실패 등) 결정적 해결책을 제공 */}
+      {/* 권장 조치 (룰/Runbook 기반). AI 진단이 없을 때(LLM 실패 등) 결정적 해결책을 제공 */}
       {!inc.diagnosis && (
         <div className="section">
           <h3>권장 조치 <span className="tag">룰 · Runbook 기반</span></h3>
-          <p className="muted" style={{ fontSize: 12, marginTop: -6, marginBottom: 12 }}>
-            ⚠️ AI 진단(LLM)이 생성되지 않아 자동 RCA가 없습니다. 아래는 결정적 <b>룰 분류</b>와 매칭된 <b>Runbook</b>에 기반한 권장 조치입니다.
+          <p className="muted" style={{ fontSize: 12.5, marginTop: -6, marginBottom: 12, display: "flex", gap: 6 }}>
+            <Warning size={15} color="var(--warn)" aria-hidden style={{ flex: "none", marginTop: 2 }} />
+            <span>AI 진단(LLM)이 생성되지 않아 자동 RCA가 없습니다. 아래는 결정적 <b>룰 분류</b>와 매칭된 <b>Runbook</b>에 기반한 권장 조치입니다.</span>
           </p>
           {inc.rule && inc.rule.category !== "Unknown" && (
             <p style={{ marginTop: 0 }}>
@@ -132,7 +150,9 @@ export default function IncidentDetail() {
           {runbooksWithBody.length > 0 ? (
             runbooksWithBody.map((rb, i) => (
               <div key={i} style={{ marginTop: 10 }}>
-                <div style={{ fontWeight: 600, marginBottom: 6 }}>📘 {rb.title}</div>
+                <div style={{ fontWeight: 600, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                  <BookOpen size={15} color="var(--accent-text)" aria-hidden /> {rb.title}
+                </div>
                 <div className="logs">
                   {rb.body!.split("\n").map((ln, j) => (
                     <div key={j} style={ln.startsWith("## ") ? { color: "var(--text)", fontWeight: 600, marginTop: 6 } : undefined}>
@@ -160,7 +180,7 @@ export default function IncidentDetail() {
               <p className="k muted" style={{ margin: "0 0 4px" }}>동시 발생 alert (상관 분석 입력)</p>
               <div className="logs">
                 {inc.evidence.relatedAlerts.map((a, i) => (
-                  <div key={i}>• <code>{a.alertname}</code>{a.namespace ? ` (${a.namespace})` : ""}{a.severity ? ` · ${a.severity}` : ""}{a.summary ? ` — ${a.summary}` : ""}</div>
+                  <div key={i}><code>{a.alertname}</code>{a.namespace ? ` (${a.namespace})` : ""}{a.severity ? ` · ${a.severity}` : ""}{a.summary ? `: ${a.summary}` : ""}</div>
                 ))}
               </div>
             </>
@@ -171,7 +191,7 @@ export default function IncidentDetail() {
           {runbooks.length > 0 && (
             <>
               <p className="k muted" style={{ margin: "0 0 4px" }}>매칭된 Runbook</p>
-              <div>{runbooks.map((r, i) => <span key={i} className="badge ok" style={{ marginRight: 6 }}>📘 {r.title}</span>)}</div>
+              <div>{runbooks.map((r, i) => <span key={i} className="badge ok" style={{ marginRight: 6 }}>{r.title}</span>)}</div>
             </>
           )}
           {inc.evidence.resourceStatus && Object.keys(inc.evidence.resourceStatus).length > 0 && (
@@ -183,7 +203,7 @@ export default function IncidentDetail() {
           {inc.evidence.events.length > 0 && (
             <>
               <p className="k muted" style={{ margin: "10px 0 4px" }}>Events (K8s)</p>
-              <div className="logs">{inc.evidence.events.map((e, i) => <div key={i}>• {e}</div>)}</div>
+              <div className="logs">{inc.evidence.events.map((e, i) => <div key={i}>{e}</div>)}</div>
             </>
           )}
           {inc.evidence.logs.length > 0 && (
