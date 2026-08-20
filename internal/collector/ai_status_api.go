@@ -86,7 +86,13 @@ func fetchProviderModels(endpoint, apiKey string) ([]string, error) {
 	if strings.TrimSpace(endpoint) == "" {
 		return nil, fmt.Errorf("AI endpoint가 설정되지 않았습니다")
 	}
-	url := strings.TrimRight(endpoint, "/") + "/models"
+	// 사용자가 Endpoint에 base(.../v1)뿐 아니라 이미 .../v1/models까지 붙여 넣는 경우가 흔하다
+	// (LM Studio가 예시로 .../v1/models를 보여줌) → 중복 부착 시 .../models/models로 요청돼
+	// "Model with identifier 'models' not found" 오류가 난다(ai_gateway.go의 chat/completions와 동일한 보정).
+	url := strings.TrimRight(endpoint, "/")
+	if !strings.HasSuffix(url, "/models") {
+		url += "/models"
+	}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err

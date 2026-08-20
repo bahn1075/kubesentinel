@@ -172,8 +172,13 @@ export default function Settings() {
           </>}
 
           <label>Endpoint</label>
-          <input value={s.ai.endpoint} placeholder={isLocal ? "http://host.minikube.internal:1234/v1" : "https://api.openai.com/v1"}
-            onChange={(e) => update("ai", { endpoint: e.target.value })} />
+          <div>
+            <input value={s.ai.endpoint} placeholder={isLocal ? "http://host.minikube.internal:1234/v1" : "https://api.openai.com/v1"}
+              onChange={(e) => update("ai", { endpoint: e.target.value })} />
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              끝에 <code>/models</code>는 붙이지 마세요 (예: <code>{isLocal ? "http://host:1234/v1" : "https://api.openai.com/v1"}</code>). 조회 시 자동으로 붙습니다.
+            </div>
+          </div>
 
           <label>현재 활성 Model</label>
           <div className="btn-row" style={{ alignItems: "center" }}>
@@ -181,8 +186,9 @@ export default function Settings() {
               {status ? `${status.providerName} · ${status.model || "(모델 미설정)"}` : (statusErr ? "조회 실패" : "(조회 안 됨)")}
             </span>
             <button type="button" onClick={refreshStatus} disabled={statusChecking}>
-              {statusChecking ? "확인 중" : "상태 확인"}
+              {statusChecking ? "새로고침 중" : "새로고침"}
             </button>
+            <span className="muted" style={{ fontSize: 12 }}>저장·재시작된 설정 기준(위 Endpoint 입력값과 무관)</span>
           </div>
 
           <label>Model</label>
