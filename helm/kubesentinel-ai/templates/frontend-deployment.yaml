@@ -37,18 +37,18 @@ spec:
             - name: BACKEND_URL
               value: "http://{{ include "kubesentinel-ai.fullname" . }}:{{ .Values.service.port }}"
           {{- if .Values.probes.enabled }}
+          # nginx는 정적 파일만 서빙하므로 TCP accept 여부만 확인하면 충분하다.
+          # httpGet은 매 주기마다 "GET / HTTP/1.1" access log를 남겨 로그를 불필요하게 채운다.
           readinessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: http
             initialDelaySeconds: 3
-            periodSeconds: 10
+            periodSeconds: 15
           livenessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: http
             initialDelaySeconds: 5
-            periodSeconds: 20
+            periodSeconds: 30
           {{- end }}
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
