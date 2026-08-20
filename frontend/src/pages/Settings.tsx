@@ -70,8 +70,9 @@ export default function Settings() {
     setSaved(false);
   }
 
-  async function onSave() {
-    if (!s) return;
+  // 저장 성공 시 true를 반환한다(Pod 재시작 전 자동 저장에 사용).
+  async function onSave(): Promise<boolean> {
+    if (!s) return false;
     setSaving(true); setSaveErr(null);
     try {
       const persisted = await saveSettings(s);
@@ -85,8 +86,10 @@ export default function Settings() {
         setAiApiKeyInput(""); setGitTokenInput("");
       }
       setSaved(true);
+      return true;
     } catch (e) {
       setSaveErr(e instanceof Error ? e.message : String(e));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -105,11 +108,16 @@ export default function Settings() {
   }
 
   async function onRestartPod() {
-    if (!window.confirm("Pod를 재시작하시겠습니까? 저장된 AI 설정(Endpoint/Model)이 반영되며, 재시작 중 잠시 진단이 중단됩니다.")) return;
+    if (!window.confirm("현재 화면의 AI 설정(Endpoint/Model)을 저장한 뒤 Pod를 재시작하시겠습니까? 재시작 중 잠시 진단이 중단됩니다.")) return;
     setRestarting(true); setRestartMsg(null); setRestartErr(null);
     try {
+      // Pod 재시작은 DB에 저장된 설정을 다시 읽어들이므로, 화면에서 고른 값이 반영되도록 먼저 저장한다.
+      if (!(await onSave())) {
+        setRestartErr("설정 저장에 실패해 재시작을 취소했습니다.");
+        return;
+      }
       await restartAIPod();
-      setRestartMsg("재시작을 요청했습니다. 반영까지 잠시 기다린 후 상태를 다시 확인하세요.");
+      setRestartMsg("설정을 저장하고 재시작을 요청했습니다. 반영까지 잠시 기다린 후 상태를 다시 확인하세요.");
     } catch (e) {
       setRestartErr(e instanceof Error ? e.message : String(e));
     } finally {
