@@ -140,3 +140,8 @@ export async function checkAIHealth(endpoint?: string): Promise<AIHealth> {
   const q = endpoint ? `?endpoint=${encodeURIComponent(endpoint)}` : "";
   return getJSON<AIHealth>(`/ai/health${q}`);
 }
+
+// 이 앱 자신의 Deployment를 rollout-restart한다(저장된 AI 설정을 반영). RBAC 미부여 시 에러.
+export async function restartAIPod(): Promise<void> {
+  await sendJSON("POST", "/ai/restart");
+}

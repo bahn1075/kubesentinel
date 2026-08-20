@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Info } from "@phosphor-icons/react";
 import type { ProviderSettings } from "../api/types";
 import {
-  fetchSettings, saveSettings, fetchAIStatus, checkAIHealth,
+  fetchSettings, saveSettings, fetchAIStatus, checkAIHealth, restartAIPod,
   fetchSecretsStatus, saveSecrets,
   type AIStatus, type AIHealth, type SecretsStatus,
 } from "../api/client";
@@ -40,11 +40,30 @@ export default function Settings() {
   const [health, setHealth] = useState<AIHealth | null>(null);
   const [healthErr, setHealthErr] = useState<string | null>(null);
 
+  const [statusChecking, setStatusChecking] = useState(false);
+  const [statusErr, setStatusErr] = useState<string | null>(null);
+
+  const [restarting, setRestarting] = useState(false);
+  const [restartMsg, setRestartMsg] = useState<string | null>(null);
+  const [restartErr, setRestartErr] = useState<string | null>(null);
+
   useEffect(() => {
     fetchSettings().then(setS).catch((e) => setLoadErr(String(e)));
-    fetchAIStatus().then(setStatus).catch(() => setStatus(null));
+    refreshStatus();
     fetchSecretsStatus().then(setSecretsSet).catch(() => {});
   }, []);
+
+  async function refreshStatus() {
+    setStatusChecking(true); setStatusErr(null);
+    try {
+      setStatus(await fetchAIStatus());
+    } catch (e) {
+      setStatus(null);
+      setStatusErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStatusChecking(false);
+    }
+  }
 
   function update<K extends keyof ProviderSettings>(section: K, patch: Partial<ProviderSettings[K]>) {
     setS((prev) => (prev ? { ...prev, [section]: { ...prev[section], ...patch } } : prev));
@@ -82,6 +101,19 @@ export default function Settings() {
       setHealthErr(e instanceof Error ? e.message : String(e));
     } finally {
       setChecking(false);
+    }
+  }
+
+  async function onRestartPod() {
+    if (!window.confirm("Pod를 재시작하시겠습니까? 저장된 AI 설정(Endpoint/Model)이 반영되며, 재시작 중 잠시 진단이 중단됩니다.")) return;
+    setRestarting(true); setRestartMsg(null); setRestartErr(null);
+    try {
+      await restartAIPod();
+      setRestartMsg("재시작을 요청했습니다. 반영까지 잠시 기다린 후 상태를 다시 확인하세요.");
+    } catch (e) {
+      setRestartErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRestarting(false);
     }
   }
 
@@ -143,15 +175,41 @@ export default function Settings() {
           <input value={s.ai.endpoint} placeholder={isLocal ? "http://host.minikube.internal:1234/v1" : "https://api.openai.com/v1"}
             onChange={(e) => update("ai", { endpoint: e.target.value })} />
 
+          <label>현재 활성 Model</label>
+          <div className="btn-row" style={{ alignItems: "center" }}>
+            <span>
+              {status ? `${status.providerName} · ${status.model || "(모델 미설정)"}` : (statusErr ? "조회 실패" : "(조회 안 됨)")}
+            </span>
+            <button type="button" onClick={refreshStatus} disabled={statusChecking}>
+              {statusChecking ? "확인 중" : "상태 확인"}
+            </button>
+          </div>
+
           <label>Model</label>
-          <input value={s.ai.model} placeholder="모델명 (상태확인으로 조회 후 선택)"
-            onChange={(e) => update("ai", { model: e.target.value })} />
+          {health && health.healthy && health.models.length > 0 ? (
+            <select value={s.ai.model} onChange={(e) => update("ai", { model: e.target.value })}>
+              {!health.models.includes(s.ai.model) && <option value={s.ai.model}>{s.ai.model || "선택"}</option>}
+              {health.models.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          ) : (
+            <input value={s.ai.model} placeholder="모델명 (상태확인으로 조회 후 선택)"
+              onChange={(e) => update("ai", { model: e.target.value })} />
+          )}
 
           <label>상태 확인</label>
           <div>
             <button onClick={onCheckHealth} disabled={checking || !s.ai.endpoint}>
               {checking ? "조회 중" : "상태 확인 (모델 조회)"}
             </button>
+          </div>
+
+          <label>Pod 재시작</label>
+          <div className="btn-row" style={{ alignItems: "center" }}>
+            <button type="button" onClick={onRestartPod} disabled={restarting}>
+              {restarting ? "재시작 요청 중" : "Pod 재시작 (설정 반영)"}
+            </button>
+            {restartMsg && <span className="badge ok">{restartMsg}</span>}
+            {restartErr && <span className="badge crit">{restartErr}</span>}
           </div>
 
           <label>External 허용</label>
@@ -163,21 +221,13 @@ export default function Settings() {
         {healthErr && <div className="test-result err">연결 실패: {healthErr}</div>}
         {health && (health.healthy ? (
           <div className="test-result ok">
-            <strong>연결 성공</strong> ({health.latencyMs}ms) · {health.models.length}개 모델. 클릭하면 Model에 적용됩니다.
-            <div className="model-chips">
-              {health.models.map((m) => (
-                <button key={m} type="button" className={`model-chip ${m === s.ai.model ? "active" : ""}`}
-                  onClick={() => update("ai", { model: m })}>{m}</button>
-              ))}
-            </div>
+            <strong>연결 성공</strong> ({health.latencyMs}ms) · {health.models.length}개 모델. 위 Model 항목에서 선택하세요.
           </div>
         ) : <div className="test-result err">연결 실패: {health.error}</div>)}
 
-        {status && (
-          <p className="muted" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
-            현재 활성(백엔드): {status.providerName} · {status.model || "(모델 미설정)"}. 저장 후 백엔드 재시작 시 반영됩니다.
-          </p>
-        )}
+        <p className="muted" style={{ fontSize: 12, marginTop: 12, marginBottom: 0 }}>
+          설정 저장 후 실제 반영을 위해서는 Pod 재시작이 필요합니다(AI 설정은 기동 시에만 로드됩니다).
+        </p>
       </div>
 
       {/* ── Collector ── */}

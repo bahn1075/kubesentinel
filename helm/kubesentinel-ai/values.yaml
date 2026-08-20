@@ -145,6 +145,10 @@ serviceAccount:
 # 향후 Kubernetes Events/manifest 수집(client-go)에 사용. secret 읽기는 의도적으로 제외(R8/안전 가드).
 rbac:
   create: true
+  # 예외: 이 앱 자신의 Deployment 1개에만 patch 권한을 부여해 Settings의 "Pod 재시작" 버튼이 동작하게 한다.
+  # off(기본)이면 재시작 버튼은 API 호출 시 에러를 반환한다(read-only 원칙 유지).
+  selfRestart:
+    enabled: false
 
 # Pod/컨테이너 보안 컨텍스트 (distroless nonroot 기준)
 podSecurityContext:

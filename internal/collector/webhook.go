@@ -102,6 +102,7 @@ func (s *WebhookServer) Start() error {
 	mux.HandleFunc("/api/ignores/", s.handleIgnoreDetail)
 	mux.HandleFunc("/api/ai/status", s.handleAIStatus)
 	mux.HandleFunc("/api/ai/health", s.handleAIHealth)
+	mux.HandleFunc("/api/ai/restart", s.handleAIRestart)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
 
 	fmt.Printf("Starting Webhook Server on port %s...\n", s.Port)

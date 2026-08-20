@@ -36,6 +36,13 @@ spec:
               containerPort: {{ .Values.service.port }}
               protocol: TCP
           env:
+            # ── self-restart(Settings "Pod 재시작" 버튼)용 자기 식별 정보 ──
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: KUBESENTINEL_AI_DEPLOYMENT_NAME
+              value: {{ include "kubesentinel-ai.fullname" . | quote }}
             # ── 현재 config.LoadConfig가 읽는 env (architecture.md §2: 값 주입) ──
             - name: KUBESENTINEL_AI_ENDPOINT
               value: {{ .Values.ai.endpoint | quote }}

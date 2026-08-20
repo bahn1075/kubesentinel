@@ -9,6 +9,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -108,6 +109,20 @@ func (k *KubeCollector) ListPods(ns string) []string {
 		out = append(out, line)
 	}
 	return out
+}
+
+// RestartDeployment는 지정된 Deployment에 rollout-restart 주석을 패치해 재시작을 트리거한다.
+// self-restart(AI 설정 반영) 전용 — RBAC은 이 Deployment 1개로 scope된 patch 권한만 부여된다(rbac-restart.yaml).
+func (k *KubeCollector) RestartDeployment(ns, name string) error {
+	if k == nil {
+		return fmt.Errorf("kubernetes client를 사용할 수 없습니다 (in-cluster 아님)")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	patch := fmt.Sprintf(`{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":%q}}}}}`,
+		time.Now().Format(time.RFC3339))
+	_, err := k.cs.AppsV1().Deployments(ns).Patch(ctx, name, types.StrategicMergePatchType, []byte(patch), metav1.PatchOptions{})
+	return err
 }
 
 // NodeArchs는 클러스터 노드의 고유 아키텍처 집합을 반환한다(예: ["arm64"]). (프로브/도구용)

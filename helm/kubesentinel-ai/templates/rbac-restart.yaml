@@ -1,0 +1,33 @@
+{{- if and .Values.rbac.create .Values.rbac.selfRestart.enabled -}}
+# 예외: 이 앱 자신의 Deployment 1개에만 scope된 patch 권한 (architecture.md §11.1의 read-only 원칙에 대한 명시적 예외).
+# 목적: Settings에서 AI 모델/엔드포인트를 바꾼 뒤 "Pod 재시작" 버튼으로 반영(config는 기동 시에만 로드됨).
+# 기본값은 off — 켜면 이 ServiceAccount가 자신의 Deployment를 rollout-restart(annotation patch)할 수 있게 된다.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "kubesentinel-ai.fullname" . }}-self-restart
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubesentinel-ai.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: [{{ include "kubesentinel-ai.fullname" . | quote }}]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "kubesentinel-ai.fullname" . }}-self-restart
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubesentinel-ai.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "kubesentinel-ai.fullname" . }}-self-restart
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "kubesentinel-ai.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
