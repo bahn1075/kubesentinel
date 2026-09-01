@@ -51,6 +51,8 @@ type AIConfig struct {
 	AllowExternal  bool   `yaml:"allow_external"`
 	RedactSecrets  bool   `yaml:"redact_secrets"`
 	MaxInputTokens int    `yaml:"max_input_tokens"`
+	// Language는 AI 진단 응답의 자연어 필드를 쓸 언어다(en|ko|zh|la|ja|fr|de). 비어있으면 모델 기본값.
+	Language string `yaml:"language"`
 }
 
 // GitOpsConfig는 Git 연동 및 PR 생성 설정을 담습니다. (architecture.md §4.5 반영)
@@ -81,6 +83,7 @@ func LoadConfig() (*Config, error) {
 			ProviderType:   "openai-compatible",
 			MaxInputTokens: 120000,
 			RedactSecrets:  true,
+			Language:       "ko",
 		},
 		Collector: CollectorConfig{
 			LogLines:        50,
@@ -102,6 +105,9 @@ func LoadConfig() (*Config, error) {
 	}
 	if val := os.Getenv("KUBESENTINEL_AI_MODEL"); val != "" {
 		cfg.AI.Model = val
+	}
+	if val := os.Getenv("KUBESENTINEL_AI_LANGUAGE"); val != "" {
+		cfg.AI.Language = val
 	}
 	if val := os.Getenv("KUBESENTINEL_AI_GIT_TOKEN"); val != "" {
 		cfg.GitOps.Token = val

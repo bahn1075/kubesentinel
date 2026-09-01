@@ -62,6 +62,7 @@ func main() {
 	// agentic 진단용 read-only 도구 실행기 (LLM이 근거를 스스로 수집) — L3
 	toolRunner := collector.NewToolRunner(cfg.Collector)
 	engine := diagnosis.NewEngine(aiGateway, toolRunner)
+	engine.Language = cfg.AI.Language
 	enricher := collector.NewEnricher(cfg.Collector)
 	notify, err := notifier.New(cfg.Notifier, cfg.Collector.GrafanaURL)
 	if err != nil {
@@ -109,6 +110,9 @@ func applyDBSettings(cfg *config.Config, s models.AppSettings) {
 	}
 	if s.AI.Model != "" {
 		cfg.AI.Model = s.AI.Model
+	}
+	if s.AI.Language != "" {
+		cfg.AI.Language = s.AI.Language
 	}
 	cfg.AI.AllowExternal = s.AI.AllowExternal
 	cfg.AI.RedactSecrets = s.AI.RedactSecrets

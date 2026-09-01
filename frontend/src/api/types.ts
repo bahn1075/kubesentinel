@@ -118,6 +118,7 @@ export interface ProviderSettings {
     authMethod: string;    // (frontier) api-key | oauth | machine
     allowExternal: boolean;
     redactSecrets: boolean;
+    language: string;      // AI 진단 응답 언어: en | ko | zh | la | ja | fr | de
   };
   collector: { prometheusUrl: string; lokiUrl: string; alertmanagerUrl: string; grafanaUrl: string };
   notifier: { type: string };

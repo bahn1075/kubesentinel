@@ -210,6 +210,17 @@ export default function Settings() {
               onChange={(e) => update("ai", { model: e.target.value })} />
           )}
 
+          <label>응답 언어</label>
+          <select value={s.ai.language} onChange={(e) => update("ai", { language: e.target.value })}>
+            <option value="ko">한국어</option>
+            <option value="en">English</option>
+            <option value="zh">中文</option>
+            <option value="la">Latina</option>
+            <option value="ja">日本語</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+          </select>
+
           <label>상태 확인</label>
           <div>
             <button onClick={onCheckHealth} disabled={checking || !s.ai.endpoint}>

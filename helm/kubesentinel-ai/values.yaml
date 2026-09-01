@@ -26,6 +26,7 @@ ai:
   model: ""             # 예: llama3 | gpt-4o-mini
   allowExternal: false  # 외부 모델 전송 허용 (사내 규정에 따라)
   redactSecrets: true
+  language: ko          # AI 진단 응답 언어: en|ko|zh|la|ja|fr|de
 
 # ── Tailnet egress targets (Tailscale Kubernetes Operator) ────────
 # enabled=true면 tailnet 장비/서비스를 클러스터 Service DNS로 노출한다.

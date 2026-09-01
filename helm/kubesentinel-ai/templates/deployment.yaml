@@ -48,6 +48,8 @@ spec:
               value: {{ .Values.ai.endpoint | quote }}
             - name: KUBESENTINEL_AI_MODEL
               value: {{ .Values.ai.model | quote }}
+            - name: KUBESENTINEL_AI_LANGUAGE
+              value: {{ .Values.ai.language | quote }}
             - name: KUBESENTINEL_AI_PROMETHEUS_URL
               value: {{ .Values.collector.prometheusUrl | quote }}
             - name: KUBESENTINEL_AI_LOKI_URL

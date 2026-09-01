@@ -28,6 +28,8 @@ type Engine struct {
 	aiClient models.AIClient
 	tools    ToolRunner // nil이면 단발 분석(도구 루프 없음)
 	maxIter  int
+	// Language는 진단 응답의 자연어 필드를 쓸 언어다(en|ko|zh|la|ja|fr|de). 비어있으면 지시하지 않음(모델 기본값).
+	Language string
 }
 
 // NewEngine은 새로운 Diagnosis Engine을 생성합니다. tools가 nil이면 agentic 루프를 건너뛴다.
@@ -49,6 +51,28 @@ const schemaRules = "Respond with ONLY a single JSON object, no markdown, EXACTL
 	"CORRELATION: 'related_alerts' in the evidence lists OTHER alerts firing simultaneously — correlate them; the true cause may originate from a different alert/resource (e.g., a failing CronJob/Job or node problem making control-plane targets look 'Down').\n" +
 	"PROBE FINDINGS: 'probe_findings' are DETERMINISTIC automated checks run by the system (e.g., comparing an image's supported platforms against the cluster node architecture, or checking whether an image tag exists). Treat them as HIGH-SIGNAL, verified evidence: when a probe finding identifies a concrete cause (e.g., an architecture mismatch or a missing tag), base root_cause and proposed_actions DIRECTLY and SPECIFICALLY on it (name the exact image, platforms, and fix) rather than giving generic advice.\n" +
 	"CONFIDENCE GATING: if metrics, logs, events, resource_status AND probe_findings are all empty, you are guessing from the alert name — set confidence <= 0.4, phrase root_cause as a hypothesis, state what evidence is missing, and make proposed_actions INVESTIGATION steps (type='suggestion', risk='low'), not specific fixes."
+
+// languageNames는 Settings에서 선택 가능한 응답 언어 코드 → 모델에 지시할 표시명이다.
+var languageNames = map[string]string{
+	"en": "English",
+	"ko": "Korean (한국어)",
+	"zh": "Chinese (中文)",
+	"la": "Latin (Lingua Latina)",
+	"ja": "Japanese (日本語)",
+	"fr": "French (Français)",
+	"de": "German (Deutsch)",
+}
+
+// languageRule은 자연어 필드(root_cause/summary/proposed_actions[].description)를 어떤
+// 언어로 쓸지 지시하는 문구를 만든다. lang이 비어있거나 알 수 없으면 지시하지 않는다(모델 기본 동작).
+func languageRule(lang string) string {
+	name, ok := languageNames[lang]
+	if !ok {
+		return ""
+	}
+	return "\nRESPONSE LANGUAGE: write all natural-language text (root_cause, summary, proposed_actions[].description) in " +
+		name + ". Keep JSON keys, resource/file names, code, and command examples unchanged (do not translate identifiers or commands)."
+}
 
 // Analyze는 EvidenceBundle을 기반으로 AI 분석을 수행합니다.
 // tools가 있으면 agentic(도구 수집) 루프 후 검증, 없으면 단발 후 검증.
@@ -78,7 +102,7 @@ func (e *Engine) Analyze(bundle *models.EvidenceBundle) (*models.DiagnosisResult
 // analyzeSingle: 단발 진단 (도구 없음/로컬 fallback).
 func (e *Engine) analyzeSingle(evidenceJSON string) (*models.DiagnosisResult, error) {
 	resp, err := e.aiClient.ChatMessages([]models.ChatMessage{
-		{Role: "system", Content: "You are a Kubernetes SRE. " + schemaRules},
+		{Role: "system", Content: "You are a Kubernetes SRE. " + schemaRules + languageRule(e.Language)},
 		{Role: "user", Content: "INCIDENT EVIDENCE (JSON):\n" + evidenceJSON + "\n\nProduce the diagnosis JSON."},
 	})
 	if err != nil {
@@ -95,7 +119,7 @@ func (e *Engine) analyzeAgentic(evidenceJSON string) (*models.DiagnosisResult, e
 		"\nGUIDANCE: Use 'k8s_get' to read any resource's real spec/status (deployment, pod, service, configmap, ingress, hpa, node, job, …) and 'k8s_logs' (previous=true) for crashing containers. Prefer inspecting concrete resources over guessing. Do NOT request Secrets. Base the diagnosis on what you actually observe.\n" +
 		"PROTOCOL: To call a tool respond with ONLY {\"tool\":\"<name>\",\"args\":{...},\"reason\":\"<why>\"}.\n" +
 		"When you have enough evidence, respond with the FINAL diagnosis JSON instead.\n" +
-		"FINAL FORMAT: " + schemaRules
+		"FINAL FORMAT: " + schemaRules + languageRule(e.Language)
 
 	messages := []models.ChatMessage{
 		{Role: "system", Content: sys},
@@ -143,7 +167,7 @@ func (e *Engine) verify(evidenceJSON string, d *models.DiagnosisResult) *models.
 	resp, err := e.aiClient.ChatMessages([]models.ChatMessage{
 		{Role: "system", Content: "You are a skeptical senior SRE reviewer. Verify the proposed diagnosis against the evidence. " +
 			"If root_cause is NOT supported by metrics/logs/events/resource_status, lower confidence and correct it. " +
-			"Prefer explanations consistent with related_alerts. Return ONLY the corrected FINAL diagnosis JSON. " + schemaRules},
+			"Prefer explanations consistent with related_alerts. Return ONLY the corrected FINAL diagnosis JSON. " + schemaRules + languageRule(e.Language)},
 		{Role: "user", Content: "EVIDENCE:\n" + evidenceJSON + "\n\nPROPOSED DIAGNOSIS:\n" + string(dj) +
 			"\n\nReturn the corrected FINAL diagnosis JSON."},
 	})

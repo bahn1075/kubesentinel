@@ -19,6 +19,9 @@ type AISettings struct {
 	AuthMethod    string `json:"authMethod"` // (frontier) api-key | oauth | machine
 	AllowExternal bool   `json:"allowExternal"`
 	RedactSecrets bool   `json:"redactSecrets"`
+	// AI 진단(RCA) 응답의 자연어 필드(root_cause/summary/proposed_actions 설명)를 쓸 언어.
+	// en|ko|zh|la|ja|fr|de. 비어있으면 모델 기본 동작(지시 없음).
+	Language string `json:"language"`
 }
 
 type CollectorSettings struct {
@@ -48,6 +51,7 @@ func DefaultAppSettings() AppSettings {
 			Type:          "openai-compatible",
 			AuthMethod:    "api-key",
 			RedactSecrets: true,
+			Language:      "ko",
 		},
 		Collector: CollectorSettings{},
 		Notifier:  NotifierSettings{Type: "slack"},
