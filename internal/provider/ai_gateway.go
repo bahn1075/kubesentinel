@@ -25,8 +25,9 @@ func NewAIGateway(cfg *config.AIConfig) *AIGateway {
 	return &AIGateway{
 		cfg: cfg,
 		client: &http.Client{
-			// 로컬 모델(LM Studio/Ollama 등)은 추론이 느릴 수 있어 넉넉히 둔다.
-			Timeout: 90 * time.Second,
+			// 로컬 모델(LM Studio/Ollama 등), 특히 대형 모델은 추론이 수 분 걸릴 수 있다.
+			// 진단 호출은 모두 비동기(webhook 응답을 막지 않음)이므로 느려도 정확한 응답을 기다린다.
+			Timeout: 5 * time.Minute,
 		},
 	}
 }
