@@ -1,6 +1,7 @@
+import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Warning, BookOpen, ArrowLeft, ArrowSquareOut } from "@phosphor-icons/react";
-import { fetchIncident } from "../api/client";
+import { fetchIncident, reanalyzeIncident } from "../api/client";
 import { useAsync } from "../lib/useAsync";
 import { STATE_FLOW, severityClass, stateClass, riskClass, formatTime, isFailureState } from "../lib/format";
 import Skeleton from "../components/Skeleton";
@@ -33,7 +34,24 @@ function ProbeBlock({ findings }: { findings: string[] }) {
 
 export default function IncidentDetail() {
   const { id = "" } = useParams();
-  const { data: inc, loading } = useAsync(() => fetchIncident(id), [id]);
+  const { data, loading } = useAsync(() => fetchIncident(id), [id]);
+  const [inc, setInc] = useState(data);
+  useEffect(() => setInc(data), [data]);
+
+  const [reanalyzing, setReanalyzing] = useState(false);
+  const [reanalyzeErr, setReanalyzeErr] = useState<string | null>(null);
+
+  async function onReanalyze() {
+    if (!inc) return;
+    setReanalyzing(true); setReanalyzeErr(null);
+    try {
+      setInc(await reanalyzeIncident(inc.incidentId));
+    } catch (e) {
+      setReanalyzeErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setReanalyzing(false);
+    }
+  }
 
   if (loading) return <Skeleton title rows={8} />;
   if (!inc) return (
@@ -135,10 +153,18 @@ export default function IncidentDetail() {
       {/* 권장 조치 (룰/Runbook 기반). AI 진단이 없을 때(LLM 실패 등) 결정적 해결책을 제공 */}
       {!inc.diagnosis && (
         <div className="section">
-          <h3>권장 조치 <span className="tag">룰 · Runbook 기반</span></h3>
-          <p className="muted" style={{ fontSize: 12.5, marginTop: -6, marginBottom: 12, display: "flex", gap: 6 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+            <h3 style={{ margin: 0 }}>권장 조치 <span className="tag">룰 · Runbook 기반</span></h3>
+            <div style={{ textAlign: "right" }}>
+              <button onClick={onReanalyze} disabled={reanalyzing}>
+                {reanalyzing ? "재분석 중" : "AI 재분석 실행"}
+              </button>
+              {reanalyzeErr && <div className="muted" style={{ fontSize: 12, color: "var(--crit-text)", marginTop: 4, maxWidth: 320 }}>{reanalyzeErr}</div>}
+            </div>
+          </div>
+          <p className="muted" style={{ fontSize: 12.5, marginTop: 10, marginBottom: 12, display: "flex", gap: 6 }}>
             <Warning size={15} color="var(--warn)" aria-hidden style={{ flex: "none", marginTop: 2 }} />
-            <span>AI 진단(LLM)이 생성되지 않아 자동 RCA가 없습니다. 아래는 결정적 <b>룰 분류</b>와 매칭된 <b>Runbook</b>에 기반한 권장 조치입니다.</span>
+            <span>AI 진단(LLM)이 생성되지 않아 자동 RCA가 없습니다. 아래는 결정적 <b>룰 분류</b>와 매칭된 <b>Runbook</b>에 기반한 권장 조치입니다. LLM 연결을 확인한 뒤 위 <b>AI 재분석 실행</b> 버튼으로 다시 시도할 수 있습니다.</span>
           </p>
           {inc.rule && inc.rule.category !== "Unknown" && (
             <p style={{ marginTop: 0 }}>
@@ -163,7 +189,7 @@ export default function IncidentDetail() {
               </div>
             ))
           ) : (
-            <p className="muted">매칭된 Runbook 본문이 없습니다. 위 근거(Events/Metrics)를 검토해 수동 조치하세요. (백엔드 재분석 시 Runbook 조치가 채워집니다.)</p>
+            <p className="muted">매칭된 Runbook 본문이 없습니다. 위 근거(Events/Metrics)를 검토해 수동 조치하거나, 위 <b>AI 재분석 실행</b> 버튼으로 AI 진단을 다시 시도하세요.</p>
           )}
         </div>
       )}

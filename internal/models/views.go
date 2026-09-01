@@ -103,6 +103,52 @@ func NewIncidentView(b *EvidenceBundle, d *DiagnosisResult, state string) Incide
 	return v
 }
 
+// EvidenceBundleFromView는 저장된 IncidentView로부터 재분석(재분석 실행 버튼)에 필요한
+// EvidenceBundle을 복원한다. IncidentView에 없는 Kind/Annotations/Source는 비워두는데,
+// 이들은 LLM 진단 프롬프트에 영향을 주지 않는 부가 메타데이터이기 때문이다.
+func EvidenceBundleFromView(v IncidentView) *EvidenceBundle {
+	b := &EvidenceBundle{
+		IncidentID:   v.IncidentID,
+		Alert:        v.Alert,
+		Namespace:    v.Namespace,
+		Workload:     v.Workload,
+		Pod:          v.Pod,
+		Severity:     v.Severity,
+		Metrics:      []map[string]interface{}{},
+		Logs:         []string{},
+		Events:       []string{},
+		ResourceYAML: map[string]interface{}{},
+		Rule:         v.Rule,
+	}
+	if v.Evidence != nil {
+		if v.Evidence.Metrics != nil {
+			b.Metrics = v.Evidence.Metrics
+		}
+		if v.Evidence.Logs != nil {
+			b.Logs = v.Evidence.Logs
+		}
+		if v.Evidence.Events != nil {
+			b.Events = v.Evidence.Events
+		}
+		b.RelatedAlerts = v.Evidence.RelatedAlerts
+		b.ProbeFindings = v.Evidence.ProbeFindings
+		if v.Evidence.ResourceStatus != nil {
+			b.ResourceYAML = v.Evidence.ResourceStatus
+		}
+		for _, rb := range v.Evidence.Runbooks {
+			b.Runbooks = append(b.Runbooks, RunbookMatch{Title: rb.Title, Category: rb.Category, Body: rb.Body})
+		}
+		if v.Evidence.GitContext != nil {
+			b.GitContext = GitContext{
+				Repo:       v.Evidence.GitContext.Repo,
+				Path:       v.Evidence.GitContext.Path,
+				LastCommit: v.Evidence.GitContext.LastCommit,
+			}
+		}
+	}
+	return b
+}
+
 // evidenceQuality는 수집된 근거의 충실도를 코드로 판정한다(LLM에 의존하지 않음).
 //
 //	none    — metric·log·event 모두 없음(alert 이름만으로 진단 = 조사용)

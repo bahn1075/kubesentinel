@@ -69,6 +69,12 @@ export async function fetchIncident(id: string): Promise<Incident | undefined> {
   }
 }
 
+// AI 진단이 없는(당시 LLM 연결 실패 등) 인시던트를, 이미 수집된 근거로 재분석한다.
+// 근거를 다시 모으지 않고 저장된 evidence로 LLM만 다시 호출한다.
+export async function reanalyzeIncident(id: string): Promise<Incident> {
+  return sendJSON<Incident>("POST", `/incidents/${encodeURIComponent(id)}/reanalyze`);
+}
+
 export async function fetchPolicies(): Promise<RemediationPolicy[]> {
   if (USE_MOCK) return Promise.resolve(mockPolicies);
   return getJSON<RemediationPolicy[]>("/policies");
