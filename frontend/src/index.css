@@ -1,45 +1,43 @@
 /* ─────────────────────────────────────────────────────────────
    KubeSentinel design tokens
-   Palette (coolors): #780000 · #C1121F · #FDF0D5 · #003049 · #669BBC
-   Themes: dark (default, Prussian Blue surfaces) / light (cream surfaces).
+   Themes: 일반적인 중립 톤 — dark(near-black, 기본) / light(white).
    Selected via :root[data-theme], persisted per browser (src/lib/theme.ts).
+   coolors 팔레트(#669BBC 액센트, #C1121F 레드)는 액센트/상태색에만 사용.
    Accent lock: interactive accent is Air Blue (#669BBC) only.
    Red family is reserved for severity/danger semantics.
    Radius rule: panels 12px · controls 8px · badges/chips pill.
    All text tokens pass WCAG AA against their surfaces (computed).
    ───────────────────────────────────────────────────────────── */
 :root {
-  /* palette anchors */
+  /* accent anchors (coolors) */
   --red-deep: #780000;
   --red: #c1121f;
-  --cream: #fdf0d5;
-  --navy: #003049;
   --blue: #669bbc;
 
-  /* surfaces (derived steps of --navy) */
-  --bg: #001624;
-  --surface: #00263a;
-  --surface-2: #003049;
-  --ink-well: #00101a;
-  --border: color-mix(in srgb, var(--blue) 22%, var(--surface));
-  --border-strong: color-mix(in srgb, var(--blue) 36%, var(--surface));
+  /* surfaces (neutral near-black) */
+  --bg: #101214;
+  --surface: #17191c;
+  --surface-2: #212429;
+  --ink-well: #0b0c0e;
+  --border: color-mix(in srgb, #ffffff 12%, var(--surface));
+  --border-strong: color-mix(in srgb, #ffffff 20%, var(--surface));
 
-  /* text */
-  --text: var(--cream);
-  --text-dim: color-mix(in srgb, var(--cream) 66%, var(--surface));
+  /* text (neutral ink) */
+  --text: #e9ebee;
+  --text-dim: color-mix(in srgb, #e9ebee 64%, var(--surface));
 
   /* interactive accent (single lock) */
   --accent: var(--blue);
   --accent-text: #7fb0ce;
   --accent-strong: #82b3d0;
-  --on-accent: #001624;
+  --on-accent: #101214;
 
   /* status (text tints pass 4.5:1 on their tinted backgrounds) */
   --crit-text: #e0656c;
   --warn: #e2a64b;
-  --ok-text: #d9cdb1;
+  --ok-text: #8fce9a;
 
-  --placeholder: color-mix(in srgb, var(--cream) 45%, var(--surface));
+  --placeholder: color-mix(in srgb, #e9ebee 52%, var(--surface));
 
   --radius-panel: 12px;
   --radius-control: 8px;
@@ -48,28 +46,28 @@
   color-scheme: dark;
 }
 
-/* ── light theme (cream surfaces, navy ink; same palette anchors) ── */
+/* ── light theme (white surfaces, near-black ink) ── */
 :root[data-theme="light"] {
-  --bg: #fdf0d5;
-  --surface: #fff9ea;
-  --surface-2: #f0e1c0;
-  --ink-well: #f8ecd2;
-  --border: color-mix(in srgb, var(--navy) 16%, var(--surface));
-  --border-strong: color-mix(in srgb, var(--navy) 28%, var(--surface));
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-2: #edeff2;
+  --ink-well: #f2f3f5;
+  --border: color-mix(in srgb, #30343a 14%, var(--surface));
+  --border-strong: color-mix(in srgb, #30343a 26%, var(--surface));
 
-  --text: #002236;
-  --text-dim: color-mix(in srgb, #002236 75%, var(--surface));
+  --text: #1b1e22;
+  --text-dim: color-mix(in srgb, #1b1e22 72%, var(--surface));
 
   --accent: var(--blue);
   --accent-text: #2e5e7d;
   --accent-strong: #5b8dad;
-  --on-accent: #001624;
+  --on-accent: #101214;
 
   --crit-text: #a50e19;
   --warn: #7d5a10;
-  --ok-text: #635a40;
+  --ok-text: #2c6b3f;
 
-  --placeholder: color-mix(in srgb, #002236 48%, var(--surface));
+  --placeholder: color-mix(in srgb, #1b1e22 66%, var(--surface));
 
   color-scheme: light;
 }
