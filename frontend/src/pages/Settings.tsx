@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Info } from "@phosphor-icons/react";
+import { Info, Sun, Moon } from "@phosphor-icons/react";
+import { applyTheme, getTheme, type Theme } from "../lib/theme";
 import type { ProviderSettings } from "../api/types";
 import {
   fetchSettings, saveSettings, fetchAIStatus, checkAIHealth, restartAIPod,
@@ -46,6 +47,13 @@ export default function Settings() {
   const [restarting, setRestarting] = useState(false);
   const [restartMsg, setRestartMsg] = useState<string | null>(null);
   const [restartErr, setRestartErr] = useState<string | null>(null);
+
+  // 화면 테마 (브라우저별 localStorage 저장, 백엔드 DB와 무관)
+  const [theme, setTheme] = useState<Theme>(getTheme());
+  function onChangeTheme(t: Theme) {
+    applyTheme(t);
+    setTheme(t);
+  }
 
   useEffect(() => {
     fetchSettings().then(setS).catch((e) => setLoadErr(String(e)));
@@ -140,6 +148,37 @@ export default function Settings() {
     <>
       <h1 className="page-title">Settings</h1>
       <p className="page-sub">설정은 백엔드 DB에 저장됩니다. 민감정보(키/토큰)는 write-only로 저장되어 값은 다시 표시되지 않습니다.</p>
+
+      {/* ── 화면 테마 (브라우저 저장) ── */}
+      <div className="section">
+        <h3>화면 테마</h3>
+        <div className="form-grid">
+          <label>테마</label>
+          <div className="seg" role="radiogroup" aria-label="화면 테마">
+            <button
+              type="button"
+              className={theme === "light" ? "active" : ""}
+              role="radio"
+              aria-checked={theme === "light"}
+              onClick={() => onChangeTheme("light")}
+            >
+              <Sun size={14} aria-hidden /> Light
+            </button>
+            <button
+              type="button"
+              className={theme === "dark" ? "active" : ""}
+              role="radio"
+              aria-checked={theme === "dark"}
+              onClick={() => onChangeTheme("dark")}
+            >
+              <Moon size={14} aria-hidden /> Dark
+            </button>
+          </div>
+        </div>
+        <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>
+          즉시 적용되며 이 브라우저에만 저장됩니다(백엔드 DB 미저장).
+        </p>
+      </div>
 
       {/* ── AI Provider ── */}
       <div className="section">

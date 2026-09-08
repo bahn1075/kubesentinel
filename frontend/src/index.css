@@ -1,7 +1,8 @@
 /* ─────────────────────────────────────────────────────────────
    KubeSentinel design tokens
    Palette (coolors): #780000 · #C1121F · #FDF0D5 · #003049 · #669BBC
-   Theme lock: single dark theme on the Prussian Blue family.
+   Themes: dark (default, Prussian Blue surfaces) / light (cream surfaces).
+   Selected via :root[data-theme], persisted per browser (src/lib/theme.ts).
    Accent lock: interactive accent is Air Blue (#669BBC) only.
    Red family is reserved for severity/danger semantics.
    Radius rule: panels 12px · controls 8px · badges/chips pill.
@@ -38,11 +39,39 @@
   --warn: #e2a64b;
   --ok-text: #d9cdb1;
 
+  --placeholder: color-mix(in srgb, var(--cream) 45%, var(--surface));
+
   --radius-panel: 12px;
   --radius-control: 8px;
 
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
   color-scheme: dark;
+}
+
+/* ── light theme (cream surfaces, navy ink; same palette anchors) ── */
+:root[data-theme="light"] {
+  --bg: #fdf0d5;
+  --surface: #fff9ea;
+  --surface-2: #f0e1c0;
+  --ink-well: #f8ecd2;
+  --border: color-mix(in srgb, var(--navy) 16%, var(--surface));
+  --border-strong: color-mix(in srgb, var(--navy) 28%, var(--surface));
+
+  --text: #002236;
+  --text-dim: color-mix(in srgb, #002236 75%, var(--surface));
+
+  --accent: var(--blue);
+  --accent-text: #2e5e7d;
+  --accent-strong: #5b8dad;
+  --on-accent: #001624;
+
+  --crit-text: #a50e19;
+  --warn: #7d5a10;
+  --ok-text: #635a40;
+
+  --placeholder: color-mix(in srgb, #002236 48%, var(--surface));
+
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -346,7 +375,7 @@ input[type="text"], input[type="password"], input:not([type]), select {
   font: inherit;
   transition: border-color 150ms ease, box-shadow 150ms ease;
 }
-input::placeholder { color: color-mix(in srgb, var(--cream) 45%, var(--surface)); }
+input::placeholder { color: var(--placeholder); }
 input:focus, select:focus {
   outline: none;
   border-color: var(--accent);
@@ -375,6 +404,35 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   color: var(--crit-text);
 }
 
+
+/* segmented control (테마 선택 등 소수 옵션 전환) */
+.seg {
+  display: inline-flex;
+  justify-self: start;
+  width: fit-content;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.seg button {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 6px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.seg button:hover:not(.active) { color: var(--text); border-color: transparent; }
+.seg button:active { transform: none; }
+.seg button.active {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 650;
+}
 
 .tag {
   font-size: 10.5px;
