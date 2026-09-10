@@ -81,6 +81,19 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "kubesentinel-ai.postgres.fullname" . }}
+      {{- with .Values.postgres.nodeSelector }}
+      # hostPath 계열 PV는 노드 로컬이다 — 프로비저너가 있는 노드로 고정한다(values.yaml 주석 참조).
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.postgres.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.postgres.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
 ---
 apiVersion: v1
 kind: Service

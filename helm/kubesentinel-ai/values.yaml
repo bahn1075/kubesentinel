@@ -68,6 +68,18 @@ postgres:
   password: kubesentinel       # 데모용. 운영은 secret.existingSecret 또는 외부 비밀로 교체
   storage: 1Gi                 # PVC 크기
   storageClassName: ""         # 미지정 시 클러스터 default
+  # ── 다중 노드 클러스터에서의 스케줄 고정 ──────────────────────
+  # hostPath 계열 StorageClass(minikube-hostpath, local-path 등)의 PV는 노드 로컬이고
+  # nodeAffinity가 비어 있다. 파드가 프로비저너와 다른 노드로 스케줄되면
+  # 해당 경로가 kubelet에 의해 root:root 0755로 새로 만들어져
+  # runAsUser=999인 postgres가 PGDATA를 생성하지 못한다(Permission denied).
+  # hostPath는 fsGroup 소유권 변경도 지원하지 않아 아래 securityContext로 해결되지 않는다.
+  # → 다중 노드에서는 프로비저너가 있는 노드로 고정하라. (예: values/metallb.yaml)
+  #   nodeSelector: { node-role.kubernetes.io/control-plane: "" }
+  # 단일 노드 클러스터나 네트워크 스토리지(CSI)를 쓰면 비워두면 된다.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
 # ── Runbook (진단 시 LLM에 주입되는 운영자 runbook — 메타데이터/키워드 매칭, 벡터DB 불필요) ──
 # 기본 샘플 runbook을 ConfigMap으로 /etc/kubesentinel/runbooks에 마운트.

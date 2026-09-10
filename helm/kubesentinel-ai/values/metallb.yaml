@@ -18,6 +18,14 @@ ai:
 secret:
   notifierWebhook: "http://notify-sink:8080/"
 
+# minikube-hostpath 프로비저너는 컨트롤플레인의 static pod라 그 노드에만
+# 올바른 권한(0777)의 PV 디렉토리를 만든다. 다중 노드(--nodes 2 이상)에서
+# postgres가 워커로 스케줄되면 PGDATA 생성이 Permission denied로 실패하므로
+# 컨트롤플레인에 고정한다. 단일 노드에서도 무해하다.
+postgres:
+  nodeSelector:
+    node-role.kubernetes.io/control-plane: ""
+
 expose:
   mode: metallb
   # minikube metallb addon은 단일 풀(default)이라 주석 불필요.
