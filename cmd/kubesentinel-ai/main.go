@@ -42,6 +42,15 @@ func main() {
 			applyDBSettings(cfg, s)
 			fmt.Println("Applied settings from database (non-sensitive overrides).")
 		}
+
+		// 시크릿(write-only DB) 로드 → cfg 주입 (env보다 우선)
+		if v, ok, _ := st.GetSecret(models.SecretAIAPIKey); ok && v != "" {
+			cfg.AI.APIKey = v
+			fmt.Println("Loaded AI API key from database secret.")
+		}
+		if v, ok, _ := st.GetSecret(models.SecretGitToken); ok && v != "" {
+			cfg.GitOps.Token = v
+		}
 	} else {
 		fmt.Println("DATABASE_URL not set — settings persistence disabled.")
 	}
@@ -50,7 +59,10 @@ func main() {
 
 	// 3. Initialize Components (병합된 cfg 기준)
 	aiGateway := provider.NewAIGateway(&cfg.AI)
-	engine := diagnosis.NewEngine(aiGateway)
+	// agentic 진단용 read-only 도구 실행기 (LLM이 근거를 스스로 수집) — L3
+	toolRunner := collector.NewToolRunner(cfg.Collector)
+	engine := diagnosis.NewEngine(aiGateway, toolRunner)
+	engine.Language = cfg.AI.Language
 	enricher := collector.NewEnricher(cfg.Collector)
 	notify, err := notifier.New(cfg.Notifier, cfg.Collector.GrafanaURL)
 	if err != nil {
@@ -59,11 +71,29 @@ func main() {
 
 	// 4. Webhook/API Server
 	server := collector.NewWebhookServer(fmt.Sprintf("%d", cfg.App.Port), engine, enricher, notify, st, cfg.AI)
+	// 인시던트로 처리하지 않을 alert 목록(예: KubeCPUOvercommit) 주입
+	if len(cfg.Collector.IgnoreAlerts) > 0 {
+		server.IgnoreAlerts = map[string]bool{}
+		for _, a := range cfg.Collector.IgnoreAlerts {
+			server.IgnoreAlerts[a] = true
+		}
+		fmt.Printf("Ignoring alerts (not processed as incidents): %v\n", cfg.Collector.IgnoreAlerts)
+	}
+	// 사용자 관리(DB) 무시 규칙을 캐시에 로드
+	server.RefreshIgnoreRules()
 	go func() {
 		if err := server.Start(); err != nil {
 			log.Fatalf("Webhook server failed to start: %v", err)
 		}
 	}()
+
+	// 4-1. Alertmanager 폴링 (pull). URL 설정 시에만 활성. (prometheus 설정 변경 불필요)
+	if cfg.Collector.AlertmanagerURL != "" {
+		server.AlertmanagerURL = cfg.Collector.AlertmanagerURL
+		server.PollIntervalSec = cfg.Collector.PollIntervalSec
+		go server.StartAlertmanagerPoller()
+		fmt.Printf("Alertmanager polling enabled: %s (every %ds)\n", cfg.Collector.AlertmanagerURL, cfg.Collector.PollIntervalSec)
+	}
 
 	fmt.Println("KubeSentinel AI is now running. Press Ctrl+C to exit.")
 	select {}
@@ -81,6 +111,9 @@ func applyDBSettings(cfg *config.Config, s models.AppSettings) {
 	if s.AI.Model != "" {
 		cfg.AI.Model = s.AI.Model
 	}
+	if s.AI.Language != "" {
+		cfg.AI.Language = s.AI.Language
+	}
 	cfg.AI.AllowExternal = s.AI.AllowExternal
 	cfg.AI.RedactSecrets = s.AI.RedactSecrets
 
@@ -90,6 +123,9 @@ func applyDBSettings(cfg *config.Config, s models.AppSettings) {
 	if s.Collector.LokiURL != "" {
 		cfg.Collector.LokiURL = s.Collector.LokiURL
 	}
+	if s.Collector.AlertmanagerURL != "" {
+		cfg.Collector.AlertmanagerURL = s.Collector.AlertmanagerURL
+	}
 	if s.Collector.GrafanaURL != "" {
 		cfg.Collector.GrafanaURL = s.Collector.GrafanaURL
 	}
@@ -98,13 +134,13 @@ func applyDBSettings(cfg *config.Config, s models.AppSettings) {
 		cfg.Notifier.Type = s.Notifier.Type
 	}
 
-	if s.GitOps.Provider != "" {
-		cfg.GitOps.Provider = s.GitOps.Provider
+	if s.Git.Provider != "" {
+		cfg.GitOps.Provider = s.Git.Provider
 	}
-	if s.GitOps.Repository != "" {
-		cfg.GitOps.Repository = s.GitOps.Repository
+	if s.Git.Repository != "" {
+		cfg.GitOps.Repository = s.Git.Repository
 	}
-	if s.GitOps.BaseBranch != "" {
-		cfg.GitOps.BaseBranch = s.GitOps.BaseBranch
+	if s.Git.BaseBranch != "" {
+		cfg.GitOps.BaseBranch = s.Git.BaseBranch
 	}
 }

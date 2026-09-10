@@ -25,8 +25,9 @@ func NewAIGateway(cfg *config.AIConfig) *AIGateway {
 	return &AIGateway{
 		cfg: cfg,
 		client: &http.Client{
-			// 로컬 모델(LM Studio/Ollama 등)은 추론이 느릴 수 있어 넉넉히 둔다.
-			Timeout: 90 * time.Second,
+			// 로컬 모델(LM Studio/Ollama 등), 특히 대형 모델은 추론이 수 분 걸릴 수 있다.
+			// 진단 호출은 모두 비동기(webhook 응답을 막지 않음)이므로 느려도 정확한 응답을 기다린다.
+			Timeout: 5 * time.Minute,
 		},
 	}
 }
@@ -45,18 +46,25 @@ type Message struct {
 	Content string `json:"content"`
 }
 
-// Chat은 AI에게 프롬프트를 전달하고 응답을 받아옵니다.
+// Chat은 AI에게 단발 프롬프트를 전달하고 응답을 받아옵니다.
 func (g *AIGateway) Chat(prompt string, context string) (*models.ChatResponse, error) {
-	// 1. 프롬프트 엔지니어링: 컨텍스트와 질문을 결합
 	fullPrompt := fmt.Sprintf("Context:\n%s\n\nQuestion: %s", context, prompt)
+	return g.ChatMessages([]models.ChatMessage{
+		{Role: "system", Content: "You are KubeSentinel AI, a Kubernetes expert. Respond with valid JSON only."},
+		{Role: "user", Content: fullPrompt},
+	})
+}
 
+// ChatMessages는 다중 턴 대화를 OpenAI 호환 엔드포인트로 전송한다(agentic 루프·검증 패스용).
+func (g *AIGateway) ChatMessages(messages []models.ChatMessage) (*models.ChatResponse, error) {
+	msgs := make([]Message, 0, len(messages))
+	for _, m := range messages {
+		msgs = append(msgs, Message{Role: m.Role, Content: m.Content})
+	}
 	reqBody := ChatRequest{
 		Model:       g.cfg.Model,
 		Temperature: 0.1, // 결정성 ↑ (architecture.md §4.2)
-		Messages: []Message{
-			{Role: "system", Content: "You are KubeSentinel AI, a Kubernetes expert. Respond with valid JSON only."},
-			{Role: "user", Content: fullPrompt},
-		},
+		Messages:    msgs,
 	}
 
 	jsonData, err := json.Marshal(reqBody)

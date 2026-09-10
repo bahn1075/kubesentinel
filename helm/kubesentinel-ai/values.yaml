@@ -4,6 +4,10 @@
 
 replicaCount: 1
 
+# 보관할 이전 ReplicaSet 개수(롤백/이력용). N개 old + 현재 1개가 남는다.
+# 2 → ArgoCD/kubectl에 현재 포함 최근 3개 RS만 표시(오래된 RS는 자동 정리).
+revisionHistoryLimit: 2
+
 image:
   repository: ghcr.io/your-org/kubesentinel-ai
   # tag 미지정 시 Chart.appVersion 사용
@@ -22,6 +26,7 @@ ai:
   model: ""             # 예: llama3 | gpt-4o-mini
   allowExternal: false  # 외부 모델 전송 허용 (사내 규정에 따라)
   redactSecrets: true
+  language: ko          # AI 진단 응답 언어: en|ko|zh|la|ja|fr|de
 
 # ── Tailnet egress targets (Tailscale Kubernetes Operator) ────────
 # enabled=true면 tailnet 장비/서비스를 클러스터 Service DNS로 노출한다.
@@ -39,6 +44,8 @@ collector:
   lokiUrl: ""           # 예: http://loki-gateway.monitoring.svc:80
   grafanaUrl: ""        # 알림 딥링크용(선택)
   logLines: 50
+  # 인시던트로 처리하지 않을 alertname 목록(노이즈/의도적 상시 warning 제외).
+  ignoreAlerts: []      # 예: ["KubeCPUOvercommit"]
 
 # ── Notifier (architecture.md §4.7) ───────────────────────────────
 notifier:
@@ -61,6 +68,12 @@ postgres:
   password: kubesentinel       # 데모용. 운영은 secret.existingSecret 또는 외부 비밀로 교체
   storage: 1Gi                 # PVC 크기
   storageClassName: ""         # 미지정 시 클러스터 default
+
+# ── Runbook (진단 시 LLM에 주입되는 운영자 runbook — 메타데이터/키워드 매칭, 벡터DB 불필요) ──
+# 기본 샘플 runbook을 ConfigMap으로 /etc/kubesentinel/runbooks에 마운트.
+runbooks:
+  enabled: true
+  existingConfigMap: ""   # 지정 시 샘플 대신 이 ConfigMap 마운트(자체 runbook)
 
 database:
   # 외부 DB를 쓰려면 여기에 DSN을 넣는다(설정 시 in-chart postgres 주소보다 우선).
@@ -133,6 +146,10 @@ serviceAccount:
 # 향후 Kubernetes Events/manifest 수집(client-go)에 사용. secret 읽기는 의도적으로 제외(R8/안전 가드).
 rbac:
   create: true
+  # 예외: 이 앱 자신의 Deployment 1개에만 patch 권한을 부여해 Settings의 "Pod 재시작" 버튼이 동작하게 한다.
+  # off(기본)이면 재시작 버튼은 API 호출 시 에러를 반환한다(read-only 원칙 유지).
+  selfRestart:
+    enabled: false
 
 # Pod/컨테이너 보안 컨텍스트 (distroless nonroot 기준)
 podSecurityContext:

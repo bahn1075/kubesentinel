@@ -16,24 +16,26 @@
 |---|---|---|---|
 | 진입점 / 컴포넌트 조립 | `cmd/kubesentinel-ai` | ✅ 동작 | env 기반 설정 로드 → 컴포넌트 주입 → webhook 서버 기동 |
 | 설정 | `internal/config` | ✅ 동작 (부분) | env 오버라이드 + 기본값. **YAML 파일 로딩은 태그만 있고 미구현** |
-| Signal Collector — 진입 | `internal/collector` (webhook.go) | ✅ 동작 | `/v1/alerts` Alertmanager webhook 수신 → 비동기 처리 |
+| Signal Collector — 진입(push) | `internal/collector` (webhook.go) | ✅ 동작 | `/v1/alerts` Alertmanager webhook 수신 → 비동기 처리 |
+| Signal Collector — 진입(pull) | `internal/collector` (alertmanager_poller.go) | ✅ 동작 | **Alertmanager v2 API 폴링**. Settings의 Alertmanager URL 설정 시 활성. fingerprint 중복제거, warning/critical만. **prometheus 설정 변경 불필요** |
 | Signal Collector — 보강 | `internal/collector` (prometheus/loki/enrich) | ✅ 동작 | Prom instant 쿼리 + Loki 로그. **best-effort(실패해도 흐름 진행)** |
-| Signal Collector — K8s | — | ❌ 미구현 | Events·워크로드 manifest 스냅샷. client-go 의존성 필요 |
+| Signal Collector — K8s | `internal/collector` (kube.go) | ✅ 동작 | **client-go(in-cluster)로 Events·리소스 상태·노드 상태 수집**(종류별 분기). read-only RBAC. best-effort |
 | 도메인 모델 | `internal/models` | ✅ 동작 | EvidenceBundle / DiagnosisResult / AlertmanagerPayload / AIClient |
-| AI Gateway | `internal/provider` | ✅ 동작 | OpenAI 호환 `/chat/completions`. fallback·토큰제한·redact 미구현 |
-| Diagnosis Engine | `internal/diagnosis` | ✅ 동작 (LLM only) | LLM RCA + JSON 추출. **Rule/Correlation/RAG 분석기 미구현** |
+| AI Gateway | `internal/provider` | ✅ 동작 | OpenAI 호환 `/chat/completions`, 단발+**다중턴(ChatMessages)**. fallback·토큰제한·redact 미구현 |
+| Diagnosis Engine | `internal/diagnosis` | ✅ 동작 (심층분석) | **Rule Analyzer(결정론적 분류) · L1 상관분석+신뢰도 게이팅 · L2 client-go 근거 · L3 agentic 도구 루프+검증 패스 · 결정론적 조사 프로브(Specific Diagnosis: 이미지 arch↔노드 arch 등)**. tools 없으면 단발+검증 fallback. Runbook(메타데이터/키워드 검색)도 구현 |
 | Notifier | `internal/notifier` | ✅ 동작 | Discord/Slack/Teams webhook. 단방향 알림만(승인 액션 없음) |
 | Remediation Planner | — | ❌ 미구현 | architecture §4.4 |
 | Policy & Safety | `internal/policy` (빈 디렉토리) | ❌ 미구현 | architecture §4.6, §9 |
 | GitOps Executor | `internal/gitops` (빈 디렉토리) | ❌ 미구현 | architecture §4.5 — MVP-1 핵심 |
 | Audit | `internal/audit` (빈 디렉토리) | ❌ 미구현 | |
-| Helm chart / Dockerfile | — | ❌ 미구현 | architecture §12 |
 | 테스트 | `*_test.go` | ✅ 부분 | models / provider / notifier 단위 테스트 존재. collector·engine 미커버 |
-| Dockerfile / Helm / ArgoCD | `Dockerfile`, `charts/`, `deploy/argocd/` | ✅ 동작 | multi-arch 이미지 + Helm 차트 + ArgoCD Application. `helm lint`·`docker build` 검증됨 |
+| Dockerfile / Helm / ArgoCD | `Dockerfile`, `helm/`, `deploy/argocd/` | ✅ 동작 | multi-arch 이미지 + Helm 차트 + ArgoCD Application. `helm lint`·`docker build` 검증됨 |
 | Frontend (dashboard) | `frontend/` | ✅ 동작 | React+Vite+TS. **Settings·Incidents 백엔드 API(DB) 연동**, policies/approvals는 아직 mock. nginx가 `/api`→백엔드 프록시. Helm `frontend.enabled` |
-| 설정 영속화 (Settings) | `internal/store`, `/api/settings` | ✅ 동작 | Postgres + goose 임베드 마이그레이션(v2). 비민감 설정만 저장(민감정보는 Secret/env). 기동 시 cfg에 병합되어 파이프라인이 소비(§3.6). 재시작·Pod 재생성 후 영속 검증됨 |
-| 인시던트 영속화 (Incidents) | `internal/store`, `/api/incidents` | ✅ 동작 | webhook 처리 시 `incidents` 테이블 저장 → `GET /api/incidents[/{id}]`로 대시보드 조회. camelCase 뷰가 프론트 타입과 정합 |
-| Postgres | `charts/.../postgres.yaml`, compose | ✅ 동작 | 차트 `postgres.enabled`(로컬/테스트) 또는 `database.url`(외부 DB). PVC 영속 |
+| 설정 영속화 (Settings) | `internal/store`, `/api/settings` | ✅ 동작 | Postgres + goose 임베드 마이그레이션(**v3**). 비민감 설정(AI kind/provider/authMethod, Collector prom/loki/**alertmanager**, Notifier, Git). 기동 시 cfg 병합 후 파이프라인 소비(§3.6) |
+| 시크릿 (write-only) | `internal/store`, `/api/secrets` | ✅ 동작 | `app_secrets` 테이블(마이그 00003). AI API key·git token을 **write-only**(GET은 설정 여부만). 기동 시 cfg 주입 |
+| 인시던트 영속화 (Incidents) | `internal/store`, `/api/incidents` | ✅ 동작 | webhook·폴러 처리 시 `incidents` 테이블 저장 → `GET /api/incidents[/{id}]` 대시보드 조회 |
+| Postgres | `helm/.../postgres.yaml`, compose | ✅ 동작 | 차트 `postgres.enabled`(로컬/테스트) 또는 `database.existingSecret`/`url`(외부 DB). oke는 기존 postgresql 연결 |
+| 멀티환경 노출 | `helm/.../values/{ingress,metallb,tailscale}.yaml` | ✅ 동작 | `expose.mode`로 ingress-nginx/metallb/tailscale 전환. minikube·oke 배포 검증됨 |
 
 범례: ✅ 동작 · [~]/부분 · ❌ 미구현
 
@@ -61,7 +63,7 @@ kubesentinel-ai/
     audit/ gitops/ policy/         # 빈 디렉토리 (플레이스홀더)
   Dockerfile / .dockerignore       # multi-arch(amd64+arm64) distroless 이미지
   Makefile                         # build/test/docker/helm 헬퍼
-  charts/kubesentinel-ai/          # Helm 차트 (백엔드 + frontend 함께 배포)
+  helm/kubesentinel-ai/          # Helm 차트 (백엔드 + frontend 함께 배포)
   deploy/argocd/application.yaml   # ArgoCD Application (GitOps 배포)
   frontend/                        # operator 대시보드 (React+Vite+TS, 별도 이미지)
     src/{api,pages,components,lib}  #   api/=타입·mock·client / pages/=화면
@@ -110,6 +112,23 @@ notifier.NotifyDiagnosis(bundle, result)  # Discord/Slack/Teams
 - **수신은 즉시 200**, 분석은 goroutine. (Alertmanager 재전송 방지) — 단, 현재 **동시성 제한·중복 억제(cooldown) 없음** → §6 백로그.
 - **보강 실패는 무시**하고 진단을 진행한다(엔드포인트 미설정/장애 내성).
 
+### 3-1. 진입 방식 2가지 (push / pull)
+1. **push (webhook)** — Alertmanager가 `/v1/alerts`로 전송. receiver 설정 필요(또는 AlertmanagerConfig).
+2. **pull (폴링)** — Settings의 **Alertmanager URL** 설정 시, 백엔드가 `GET {url}/api/v2/alerts`를 주기(기본 30s) 폴링. **prometheus/alertmanager 설정 변경 불필요**, 전 네임스페이스 alert 수신.
+   - fingerprint로 중복제거, `warning|critical`만, Watchdog/info 제외, resolved 시 추적 해제(재발화 재처리).
+   - 두 경로 모두 동일한 `processBundle()`(보강→분석→영속화→알림)을 거친다.
+   - ⚠️ 같은 날·같은 alertname은 `incident_id`(=`inc-<날짜>-<alertname>`) 동일 → 한 인시던트로 upsert(인스턴스별 분리하려면 incident_id에 fingerprint 포함 필요).
+
+### 3-2. 심층분석 파이프라인 (Rule / L1 / L2 / L3)
+단발 LLM 추측 → 근거 기반 심층분석으로 개선. `internal/diagnosis/engine.go`.
+- **Rule Analyzer**(`models.ClassifyRules`): LLM 이전에 alert명·Events·리소스 상태로 장애 유형(CrashLoopBackOff/OOMKilled/ImagePullBackOff/JobFailed/Unschedulable/ControlPlaneDown/TargetDown 등)을 결정론적으로 분류. `rule_classification`을 LLM에 강한 prior로 전달 + 인시던트에 `rule` 뱃지 노출. 신호 없으면 Unknown.
+- **Runbook (메타데이터/키워드 검색, 벡터DB 불필요)**: `internal/runbook`이 ConfigMap 마운트(`/etc/kubesentinel/runbooks`, `runbooks.enabled`)의 markdown+frontmatter(alerts/category/keywords)를 alertname·Rule 카테고리로 매칭 → 본문을 `matched_runbooks`로 LLM에 주입 + 인시던트에 제목 노출. 시맨틱 검색이 필요하면 bge-m3 임베딩 + Postgres/pgvector로 확장(별도 벡터DB 불필요).
+- **L1 상관분석 + 신뢰도 게이팅**: `EvidenceBundle.RelatedAlerts`(동시 발생 alert)를 LLM에 전달해 상관 추론. 근거(metric/log/event/resource)가 비면 `confidence≤0.4` + 제안을 조사용(suggestion/low)으로 유도. `evidenceQuality`(none/partial/rich)는 **코드 계산**(뷰/프론트 뱃지).
+- **L2 client-go 근거 수집**: `collector/kube.go`가 대상 네임스페이스/객체의 Events·리소스 상태(Pod/Deploy/STS/DS/Job)·노드 상태를 수집(네임스페이스 없는 인프라 alert는 node health + kube-system events). RBAC read-only. 근거가 채워지면 evidenceQuality 자동 상승.
+- **L3 agentic 도구 루프 + 검증**: LLM이 read-only 도구(`prometheus_query`/`loki_query`/`k8s_events`/`k8s_list_pods`/`k8s_get_nodes`/`image_inspect`/**`k8s_get`·`k8s_logs`**)를 **프롬프트 기반 JSON 프로토콜**로 스스로 요청→백엔드 조회→재분석(최대 3회, 로컬 모델 호환 — 네이티브 tool-calling 불필요). `k8s_get`은 client-go dynamic으로 임의 kind(pod/deploy/svc/cm/ingress/hpa/node/job/…)를 kubectl get -o json처럼 조회(Secret 거부·namespace 필수·출력 절삭), `k8s_logs`는 파드 로그(previous 지원). read-only RBAC는 secrets 제외한 채 networking/autoscaling/policy/storage/discovery까지 확장. 이후 **검증 패스**(회의적 리뷰어가 근거 대비 진단 비판·신뢰도 보정). `ToolRunner` 인터페이스는 diagnosis에 정의·collector가 구현·main이 주입(import cycle 회피). 도구 미가용(비 in-cluster) 시 단발+검증으로 graceful fallback.
+- **결정론적 조사 프로브(Specific Diagnosis)**: `collector/probe.go`가 Rule 카테고리별로 심층 조사를 코드로 수행해 구체적 근본 원인 근거(`probe_findings`)를 주입한다. v1은 **ImagePullBackOff**: 대상 이미지의 레지스트리 플랫폼(`collector/registry.go`, 공개 docker.io Registry v2)과 클러스터 노드 아키텍처(`kube.go NodeArchs`)를 비교해 **arch 불일치/태그 없음**을 판정(예: `image=[linux/amd64]` vs `nodes=[arm64]` → 멀티아치 재빌드 조치). 상관을 코드가 수행하므로 작은 로컬 모델에서도 구체적 진단이 나오고, LLM 실패 시에도 `probeFindings`가 화면에 표시된다. 설계: [docs/design/specific-diagnosis-probes.md](design/specific-diagnosis-probes.md).
+- 검증(oke): KubeSchedulerDown이 confidence 90%→35%, 상관 추론, 조사용 제안으로 전환. cronjob-ns alert에서 LLM이 `k8s_list_pods`/`k8s_events`를 스스로 호출해 조사 후 "ephemeral job 완료/false positive"로 정직 결론.
+
 ---
 
 ## 4. 설정 레퍼런스
@@ -123,6 +142,7 @@ notifier.NotifyDiagnosis(bundle, result)  # Discord/Slack/Teams
 | `KUBESENTINEL_AI_API_KEY` | AI.APIKey | — | 엔드포인트에 따라 |
 | `KUBESENTINEL_AI_PROMETHEUS_URL` | Collector.PrometheusURL | — | 미설정 시 metric 보강 skip |
 | `KUBESENTINEL_AI_LOKI_URL` | Collector.LokiURL | — | 미설정 시 log 보강 skip |
+| `KUBESENTINEL_AI_ALERTMANAGER_URL` | Collector.AlertmanagerURL | — | **설정 시 Alertmanager 폴링(pull) 활성화**. 보통 Settings(DB)로 주입 |
 | `KUBESENTINEL_AI_GRAFANA_URL` | Collector.GrafanaURL | — | 알림 딥링크용(선택) |
 | `KUBESENTINEL_AI_NOTIFIER_TYPE` | Notifier.Type | `slack`로 해석 | `discord`/`slack`/`teams` |
 | `KUBESENTINEL_AI_NOTIFIER_WEBHOOK` | Notifier.Webhook | — | 미설정 시 noop(알림 안 감) |
@@ -189,7 +209,7 @@ docker compose down
 make docker-push REGISTRY=ghcr.io/your-org TAG=v0.1.0
 
 # 2) Helm 직접 설치 (개발/검증용)
-helm install kubesentinel charts/kubesentinel-ai -n kubesentinel --create-namespace \
+helm install kubesentinel helm/kubesentinel-ai -n kubesentinel --create-namespace \
   --set image.repository=ghcr.io/your-org/kubesentinel-ai --set image.tag=v0.1.0 \
   --set ai.endpoint=http://ollama.llm.svc:11434/v1 --set ai.model=llama3 \
   --set collector.prometheusUrl=http://prometheus-operated.monitoring.svc:9090 \
@@ -202,7 +222,7 @@ kubectl apply -n argocd -f deploy/argocd/application.yaml
 
 배포 산출물 요약:
 - **Dockerfile**: `--platform=$BUILDPLATFORM` 교차컴파일 → distroless static(nonroot). CGO off.
-- **charts/kubesentinel-ai/**: deployment·service·serviceaccount·rbac(read-only ClusterRole)·secret·NOTES. 모든 §4 엔드포인트를 values로 주입. 헬스 프로브는 `/healthz` 부재로 **tcpSocket** 사용(백로그 #6에서 httpGet 전환).
+- **helm/kubesentinel-ai/**: deployment·service·serviceaccount·rbac(read-only ClusterRole)·secret·NOTES. 모든 §4 엔드포인트를 values로 주입. 헬스 프로브는 `/healthz` 부재로 **tcpSocket** 사용(백로그 #6에서 httpGet 전환).
 - **deploy/argocd/application.yaml**: automated sync(prune+selfHeal), CreateNamespace, ServerSideApply.
 
 > **주의 — 아직 env로 주입되지 않는 values**: `ai.allowExternal`·`ai.redactSecrets`·`ai.providerType`·`gitops.*`·`collector.logLines`·`logLevel`은 values에 노출돼 있으나 `config.LoadConfig`가 읽지 않는다. config 파일 로딩 또는 env 매핑 확장이 필요(백로그 #3 및 config 항목).

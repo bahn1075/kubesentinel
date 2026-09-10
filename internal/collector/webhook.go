@@ -9,6 +9,8 @@ import (
 	"kubesentinel-ai/internal/notifier"
 	"kubesentinel-ai/internal/store"
 	"net/http"
+	"strings"
+	"sync"
 )
 
 // WebhookServer는 HTTP 요청을 수신하는 서버입니다.
@@ -19,6 +21,61 @@ type WebhookServer struct {
 	Notifier notifier.Notifier
 	Store    *store.Store    // 설정 영속화 (nil이면 /api/settings 비활성)
 	AI       config.AIConfig // 현재 활성(병합된) AI 설정 — 상태/health 표시용
+
+	// Alertmanager 폴링 (pull) — URL 설정 시에만 활성
+	AlertmanagerURL string
+	PollIntervalSec int
+
+	// IgnoreAlerts는 설정(values/env)로 고정된 무시 alertname 집합이다(선언적 baseline, exact match).
+	IgnoreAlerts map[string]bool
+
+	// ignoreRules는 사용자 관리(DB) 무시 규칙 캐시다(keyword 부분일치). API 변경 시 갱신된다.
+	ignoreMu    sync.RWMutex
+	ignoreRules []models.IgnoreRule
+}
+
+// RefreshIgnoreRules는 DB의 무시 규칙을 캐시에 다시 로드한다(기동 시 + API 변경 시).
+func (s *WebhookServer) RefreshIgnoreRules() {
+	if s.Store == nil {
+		return
+	}
+	rules, err := s.Store.ListIgnoreRules()
+	if err != nil {
+		fmt.Printf("[KubeSentinel] ⚠️  failed to load ignore rules: %v\n", err)
+		return
+	}
+	s.ignoreMu.Lock()
+	s.ignoreRules = rules
+	s.ignoreMu.Unlock()
+}
+
+// bundleHaystack은 무시 규칙 매칭용 문자열(alert명 + 대상: 네임스페이스/워크로드/파드 + 주석)을 만든다.
+func bundleHaystack(b *models.EvidenceBundle) string {
+	parts := []string{b.Alert, b.Namespace, b.Workload, b.Pod}
+	for _, v := range b.Annotations {
+		parts = append(parts, v)
+	}
+	return strings.Join(parts, " ")
+}
+
+// shouldIgnore는 alert명 또는 대상(haystack)이 무시 대상인지 판단한다.
+// 설정 baseline(alertname exact) + 사용자 규칙(enabled keyword 부분일치, 대소문자 무시).
+func (s *WebhookServer) shouldIgnore(alertname, haystack string) bool {
+	if s.IgnoreAlerts != nil && s.IgnoreAlerts[alertname] {
+		return true
+	}
+	hay := strings.ToLower(haystack)
+	s.ignoreMu.RLock()
+	defer s.ignoreMu.RUnlock()
+	for _, r := range s.ignoreRules {
+		if !r.Enabled {
+			continue
+		}
+		if kw := strings.ToLower(strings.TrimSpace(r.Keyword)); kw != "" && strings.Contains(hay, kw) {
+			return true
+		}
+	}
+	return false
 }
 
 // NewWebhookServer는 새로운 WebhookServer 인스턴스를 생성합니다.
@@ -38,10 +95,14 @@ func (s *WebhookServer) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/alerts", s.handleAlertmanagerWebhook)
 	mux.HandleFunc("/api/settings", s.handleSettings)
+	mux.HandleFunc("/api/secrets", s.handleSecrets)
 	mux.HandleFunc("/api/incidents", s.handleIncidents)
 	mux.HandleFunc("/api/incidents/", s.handleIncidentDetail)
+	mux.HandleFunc("/api/ignores", s.handleIgnores)
+	mux.HandleFunc("/api/ignores/", s.handleIgnoreDetail)
 	mux.HandleFunc("/api/ai/status", s.handleAIStatus)
 	mux.HandleFunc("/api/ai/health", s.handleAIHealth)
+	mux.HandleFunc("/api/ai/restart", s.handleAIRestart)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
 
 	fmt.Printf("Starting Webhook Server on port %s...\n", s.Port)
@@ -67,47 +128,20 @@ func (s *WebhookServer) handleAlertmanagerWebhook(w http.ResponseWriter, r *http
 		http.Error(w, "Failed to create evidence bundle", http.StatusBadRequest)
 		return
 	}
+	// 무시 규칙에 걸리는 alert는 인시던트로 처리하지 않는다(200으로 정상 수신만).
+	if s.shouldIgnore(bundle.Alert, bundleHaystack(bundle)) {
+		fmt.Printf("[KubeSentinel] ⏭️  ignored alert (not processed): %s\n", bundle.Alert)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ignored"))
+		return
+	}
+	// 상관 컨텍스트: 같은 알림 그룹의 나머지 alert (webhook은 그룹 범위로 제한됨)
+	if len(payload.Alerts) > 1 {
+		bundle.RelatedAlerts = relatedFromAlerts(payload.Alerts[1:])
+	}
 
-	// 2. 근거 보강 → AI 분석 → 알림 (비동기 실행)
-	go func(b *models.EvidenceBundle) {
-		fmt.Printf("\n[KubeSentinel] 🔍 Analyzing Incident: %s\n", b.IncidentID)
-
-		// 2-1. Prometheus/Loki로 EvidenceBundle 보강 (best-effort)
-		if s.Enricher != nil {
-			s.Enricher.Enrich(b)
-		}
-
-		// 2-2. AI RCA 분석
-		result, err := s.Engine.Analyze(b)
-		state := "DiagnosisCompleted"
-		if err != nil {
-			fmt.Printf("[KubeSentinel] ❌ Analysis Failed: %v\n", err)
-			state = "ValidationFailed"
-			result = nil
-		} else {
-			fmt.Printf("[KubeSentinel] ✅ Analysis Complete!\n")
-			fmt.Printf("  - Root Cause: %s\n", result.RootCause)
-			fmt.Printf("  - Summary: %s\n", result.Summary)
-			if len(result.ProposedActions) > 0 {
-				fmt.Printf("  - Proposed Actions: %d\n", len(result.ProposedActions))
-			}
-		}
-
-		// 2-3. 인시던트 영속화 (DB, 대시보드 조회용)
-		if s.Store != nil {
-			view := models.NewIncidentView(b, result, state)
-			if e := s.Store.SaveIncident(view); e != nil {
-				fmt.Printf("[KubeSentinel] ⚠️  Save Incident Failed: %v\n", e)
-			}
-		}
-
-		// 2-4. 알림 채널 전송 (분석 성공 시) — MVP-0: 읽기 전용 RCA + 알림
-		if result != nil && s.Notifier != nil {
-			if err := s.Notifier.NotifyDiagnosis(b, result); err != nil {
-				fmt.Printf("[KubeSentinel] ⚠️  Notification Failed: %v\n", err)
-			}
-		}
-	}(bundle)
+	// 2. 근거 보강 → AI 분석 → 영속화 → 알림 (비동기 실행). webhook·폴러 공용 경로.
+	go s.processBundle(bundle)
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))

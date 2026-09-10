@@ -38,13 +38,46 @@ export interface DiagnosisResult {
   summary: string;
   confidence: number; // 0..1
   proposedActions: ProposedAction[];
+  evidenceQuality?: string; // none | partial | rich (코드 계산)
+}
+
+export interface RelatedAlert {
+  alertname: string;
+  namespace: string;
+  severity: string;
+  summary: string;
 }
 
 export interface EvidenceBundle {
   metrics: { name: string; query: string; samples: unknown[] }[];
   logs: string[];
   events: string[];
+  resourceStatus?: Record<string, unknown>;
   gitContext?: { repo: string; path: string; lastCommit: string };
+  relatedAlerts?: RelatedAlert[];
+  // 구버전 인시던트는 string[](제목만), 신버전은 객체(제목+조치 본문). 둘 다 허용.
+  runbooks?: (string | RunbookRef)[];
+  // 결정론적 조사 프로브 결과(예: 이미지 arch vs 노드 arch 비교) — 구체적 근본 원인.
+  probeFindings?: string[];
+}
+
+export interface RunbookRef {
+  title: string;
+  category?: string;
+  body?: string;
+}
+
+// 무시 규칙 (인시던트로 처리하지 않을 keyword — alert명/대상 부분일치)
+export interface IgnoreRule {
+  id: number;
+  keyword: string;
+  enabled: boolean;
+  createdAt: string;
+}
+
+export interface IgnoreList {
+  rules: IgnoreRule[];
+  config: string[]; // 설정(values/env)로 고정된 무시 alertname (읽기 전용)
 }
 
 export interface Incident {
@@ -58,6 +91,7 @@ export interface Incident {
   createdAt: string; // ISO
   diagnosis?: DiagnosisResult;
   evidence?: EvidenceBundle;
+  rule?: { category: string; rationale?: string; signals?: string[] };
   prUrl?: string;
 }
 
@@ -74,10 +108,19 @@ export interface RemediationPolicy {
 
 // architecture.md §4.2 AIProvider / §4.7 Notifier / §4.5 GitOps (설정 뷰)
 export interface ProviderSettings {
-  // 주의: 비민감 설정만 DB에 저장된다. 민감정보(AI apiKey, notifier webhook, git token)는
-  // k8s Secret/env로 관리하며 이 타입/Settings API에 포함되지 않는다. (architecture.md R8)
-  ai: { type: string; endpoint: string; model: string; allowExternal: boolean; redactSecrets: boolean };
-  collector: { prometheusUrl: string; lokiUrl: string; grafanaUrl: string };
+  // 비민감 설정만 여기에. 민감정보(AI api key, git token)는 /api/secrets(write-only)로 분리.
+  ai: {
+    kind: string;          // frontier | local
+    provider: string;      // (frontier) openai | anthropic | azure-openai | google | custom
+    type: string;          // API 형식 (openai-compatible)
+    endpoint: string;
+    model: string;
+    authMethod: string;    // (frontier) api-key | oauth | machine
+    allowExternal: boolean;
+    redactSecrets: boolean;
+    language: string;      // AI 진단 응답 언어: en | ko | zh | la | ja | fr | de
+  };
+  collector: { prometheusUrl: string; lokiUrl: string; alertmanagerUrl: string; grafanaUrl: string };
   notifier: { type: string };
-  gitops: { provider: string; repository: string; baseBranch: string };
+  git: { provider: string; authMethod: string; repository: string; baseBranch: string };
 }

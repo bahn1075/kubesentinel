@@ -1,4 +1,4 @@
-import type { Incident, RemediationPolicy, ProviderSettings } from "./types";
+import type { Incident, RemediationPolicy, ProviderSettings, IgnoreRule, IgnoreList } from "./types";
 import { mockIncidents, mockPolicies, mockSettings } from "./mock";
 
 // 백엔드 API가 아직 없으므로 기본은 MOCK 모드.
@@ -23,6 +23,35 @@ async function putJSON<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function sendJSON<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) throw new Error(`API ${method} ${path} → ${res.status}`);
+  return (res.status === 204 ? undefined : res.json()) as Promise<T>;
+}
+
+// 인시던트 확인됨(acknowledged) 처리 — 확인됨이면 목록에서 숨겨진다.
+export async function acknowledgeIncident(id: string, acknowledged = true): Promise<void> {
+  await sendJSON("PATCH", `/incidents/${encodeURIComponent(id)}`, { acknowledged });
+}
+
+// ── 무시 규칙 (Ignore rules) ──
+export async function fetchIgnores(): Promise<IgnoreList> {
+  return getJSON<IgnoreList>("/ignores");
+}
+export async function addIgnore(keyword: string): Promise<IgnoreRule> {
+  return sendJSON<IgnoreRule>("POST", "/ignores", { keyword });
+}
+export async function setIgnoreEnabled(id: number, enabled: boolean): Promise<void> {
+  await sendJSON("PATCH", `/ignores/${id}`, { enabled });
+}
+export async function deleteIgnore(id: number): Promise<void> {
+  await sendJSON("DELETE", `/ignores/${id}`);
+}
+
 // Incidents는 백엔드(DB)에서 조회한다. 백엔드가 없으면 mock으로 폴백(dev 편의).
 export async function fetchIncidents(): Promise<Incident[]> {
   try {
@@ -38,6 +67,12 @@ export async function fetchIncident(id: string): Promise<Incident | undefined> {
   } catch {
     return mockIncidents.find((i) => i.incidentId === id);
   }
+}
+
+// AI 진단이 없는(당시 LLM 연결 실패 등) 인시던트를, 이미 수집된 근거로 재분석한다.
+// 근거를 다시 모으지 않고 저장된 evidence로 LLM만 다시 호출한다.
+export async function reanalyzeIncident(id: string): Promise<Incident> {
+  return sendJSON<Incident>("POST", `/incidents/${encodeURIComponent(id)}/reanalyze`);
 }
 
 export async function fetchPolicies(): Promise<RemediationPolicy[]> {
@@ -57,6 +92,22 @@ export async function fetchSettings(): Promise<ProviderSettings> {
 
 export async function saveSettings(s: ProviderSettings): Promise<ProviderSettings> {
   return putJSON<ProviderSettings>("/settings", s);
+}
+
+// ── 민감정보 (write-only) ─────────────────────────────────────────
+export interface SecretsStatus {
+  aiApiKey: boolean;
+  gitToken: boolean;
+}
+
+// 어떤 시크릿이 설정돼 있는지 여부만 (값은 절대 반환되지 않음)
+export async function fetchSecretsStatus(): Promise<SecretsStatus> {
+  return getJSON<SecretsStatus>("/secrets");
+}
+
+// 시크릿 설정/변경/삭제. 값 있음=설정, ""=삭제, null/미포함=변경없음.
+export async function saveSecrets(patch: { aiApiKey?: string | null; gitToken?: string | null }): Promise<SecretsStatus> {
+  return putJSON<SecretsStatus>("/secrets", patch);
 }
 
 // 미래 기능(MVP-2): 승인/반려 액션. 현재는 비활성(백엔드 미구현).
@@ -89,7 +140,14 @@ export async function fetchAIStatus(): Promise<AIStatus> {
   return getJSON<AIStatus>("/ai/status");
 }
 
-// 백엔드 → 활성 제공자 health check (백엔드가 host.minikube.internal 등 실제 주소로 호출)
-export async function checkAIHealth(): Promise<AIHealth> {
-  return getJSON<AIHealth>("/ai/health");
+// 백엔드 → health check. endpoint를 주면 폼에 입력한 주소를 즉시 검사(저장/재시작 불필요).
+// API key는 백엔드가 DB 시크릿에서 실시간 조회.
+export async function checkAIHealth(endpoint?: string): Promise<AIHealth> {
+  const q = endpoint ? `?endpoint=${encodeURIComponent(endpoint)}` : "";
+  return getJSON<AIHealth>(`/ai/health${q}`);
+}
+
+// 이 앱 자신의 Deployment를 rollout-restart한다(저장된 AI 설정을 반영). RBAC 미부여 시 에러.
+export async function restartAIPod(): Promise<void> {
+  await sendJSON("POST", "/ai/restart");
 }

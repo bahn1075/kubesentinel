@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 // Config는 KubeSentinel AI의 전체 시스템 설정을 담는 루트 구조체입니다.
@@ -24,10 +25,15 @@ type DatabaseConfig struct {
 // CollectorConfig는 근거 수집(Signal Collector) 엔드포인트 설정입니다. (architecture.md §4.1)
 // 모든 주소는 값으로 주입하며 코드에 하드코딩하지 않는다. (§2 설계 원칙)
 type CollectorConfig struct {
-	PrometheusURL string `yaml:"prometheus_url"` // e.g., http://prometheus.monitoring.svc:9090
-	LokiURL       string `yaml:"loki_url"`       // e.g., http://loki.monitoring.svc:3100
-	GrafanaURL    string `yaml:"grafana_url"`    // 알림 딥링크용 (선택)
-	LogLines      int    `yaml:"log_lines"`      // Loki에서 가져올 최근 로그 라인 수
+	PrometheusURL   string `yaml:"prometheus_url"`    // e.g., http://prometheus.monitoring.svc:9090
+	LokiURL         string `yaml:"loki_url"`          // e.g., http://loki.monitoring.svc:3100
+	AlertmanagerURL string `yaml:"alertmanager_url"`  // e.g., http://alertmanager.monitoring.svc:9093 — 설정 시 폴링 활성화
+	GrafanaURL      string `yaml:"grafana_url"`       // 알림 딥링크용 (선택)
+	LogLines        int    `yaml:"log_lines"`         // Loki에서 가져올 최근 로그 라인 수
+	PollIntervalSec int    `yaml:"poll_interval_sec"` // Alertmanager 폴링 주기(초)
+	RunbookDir      string `yaml:"runbook_dir"`       // runbook markdown 디렉토리(ConfigMap 마운트)
+	// IgnoreAlerts는 인시던트로 처리하지 않을 alertname 목록이다(노이즈/의도적 상시 warning 제외).
+	IgnoreAlerts []string `yaml:"ignore_alerts"`
 }
 
 // AppConfig는 애플리케이션 자체의 기본 설정을 담습니다.
@@ -45,6 +51,8 @@ type AIConfig struct {
 	AllowExternal  bool   `yaml:"allow_external"`
 	RedactSecrets  bool   `yaml:"redact_secrets"`
 	MaxInputTokens int    `yaml:"max_input_tokens"`
+	// Language는 AI 진단 응답의 자연어 필드를 쓸 언어다(en|ko|zh|la|ja|fr|de). 비어있으면 모델 기본값.
+	Language string `yaml:"language"`
 }
 
 // GitOpsConfig는 Git 연동 및 PR 생성 설정을 담습니다. (architecture.md §4.5 반영)
@@ -75,9 +83,12 @@ func LoadConfig() (*Config, error) {
 			ProviderType:   "openai-compatible",
 			MaxInputTokens: 120000,
 			RedactSecrets:  true,
+			Language:       "ko",
 		},
 		Collector: CollectorConfig{
-			LogLines: 50,
+			LogLines:        50,
+			PollIntervalSec: 30,
+			RunbookDir:      "/etc/kubesentinel/runbooks",
 		},
 		GitOps: GitOpsConfig{
 			BaseBranch:   "main",
@@ -95,6 +106,9 @@ func LoadConfig() (*Config, error) {
 	if val := os.Getenv("KUBESENTINEL_AI_MODEL"); val != "" {
 		cfg.AI.Model = val
 	}
+	if val := os.Getenv("KUBESENTINEL_AI_LANGUAGE"); val != "" {
+		cfg.AI.Language = val
+	}
 	if val := os.Getenv("KUBESENTINEL_AI_GIT_TOKEN"); val != "" {
 		cfg.GitOps.Token = val
 	}
@@ -110,11 +124,26 @@ func LoadConfig() (*Config, error) {
 	if val := os.Getenv("KUBESENTINEL_AI_LOKI_URL"); val != "" {
 		cfg.Collector.LokiURL = val
 	}
+	if val := os.Getenv("KUBESENTINEL_AI_ALERTMANAGER_URL"); val != "" {
+		cfg.Collector.AlertmanagerURL = val
+	}
+	if val := os.Getenv("KUBESENTINEL_AI_RUNBOOK_DIR"); val != "" {
+		cfg.Collector.RunbookDir = val
+	}
 	if val := os.Getenv("KUBESENTINEL_AI_GRAFANA_URL"); val != "" {
 		cfg.Collector.GrafanaURL = val
 	}
 	if val := os.Getenv("KUBESENTINEL_AI_DATABASE_URL"); val != "" {
 		cfg.Database.URL = val
+	}
+	if val := os.Getenv("KUBESENTINEL_AI_IGNORE_ALERTS"); val != "" {
+		var out []string
+		for _, p := range strings.Split(val, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				out = append(out, p)
+			}
+		}
+		cfg.Collector.IgnoreAlerts = out
 	}
 
 	// 검증 (Validation)

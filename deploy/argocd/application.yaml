@@ -16,7 +16,7 @@ spec:
   source:
     repoURL: https://github.com/your-org/kubesentinel-ai.git
     targetRevision: main
-    path: charts/kubesentinel-ai
+    path: helm/kubesentinel-ai
     helm:
       # 환경별 값은 별도 values 파일로 분리 관리 권장.
       # 예) deploy/argocd/values/prod.yaml 를 repo에 두고 valueFiles로 참조.

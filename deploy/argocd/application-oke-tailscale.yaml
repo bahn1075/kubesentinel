@@ -12,7 +12,7 @@ spec:
   source:
     repoURL: https://github.com/bahn1075/kubesentinel.git
     targetRevision: main
-    path: charts/kubesentinel-ai
+    path: helm/kubesentinel-ai
     helm:
       valueFiles:
         - values.yaml

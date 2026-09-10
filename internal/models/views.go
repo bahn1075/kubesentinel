@@ -15,6 +15,7 @@ type IncidentView struct {
 	CreatedAt  time.Time      `json:"createdAt"`
 	Diagnosis  *DiagnosisView `json:"diagnosis,omitempty"`
 	Evidence   *EvidenceView  `json:"evidence,omitempty"`
+	Rule       *RuleResult    `json:"rule,omitempty"` // 결정론적 룰 분류
 	PRURL      string         `json:"prUrl,omitempty"`
 }
 
@@ -23,13 +24,28 @@ type DiagnosisView struct {
 	Summary         string           `json:"summary"`
 	Confidence      float64          `json:"confidence"`
 	ProposedActions []ProposedAction `json:"proposedActions"`
+	// none|partial|rich — 코드로 계산한 근거 품질(LLM 자기신고 아님).
+	EvidenceQuality string `json:"evidenceQuality,omitempty"`
 }
 
 type EvidenceView struct {
-	Metrics    []map[string]interface{} `json:"metrics"`
-	Logs       []string                 `json:"logs"`
-	Events     []string                 `json:"events"`
-	GitContext *GitContextView          `json:"gitContext,omitempty"`
+	Metrics        []map[string]interface{} `json:"metrics"`
+	Logs           []string                 `json:"logs"`
+	Events         []string                 `json:"events"`
+	ResourceStatus map[string]interface{}   `json:"resourceStatus,omitempty"`
+	GitContext     *GitContextView          `json:"gitContext,omitempty"`
+	RelatedAlerts  []RelatedAlert           `json:"relatedAlerts,omitempty"`
+	// 매칭된 runbook(제목+본문 조치). LLM 진단이 실패해도 화면에 결정적 권장 조치를 제공한다.
+	Runbooks []RunbookView `json:"runbooks,omitempty"`
+	// 결정론적 조사 프로브 결과(예: 이미지 arch vs 노드 arch). 구체적 근본 원인을 화면에 표시한다.
+	ProbeFindings []string `json:"probeFindings,omitempty"`
+}
+
+// RunbookView는 프론트 표시용 runbook(제목·분류·조치 본문)이다.
+type RunbookView struct {
+	Title    string `json:"title"`
+	Category string `json:"category,omitempty"`
+	Body     string `json:"body,omitempty"`
 }
 
 type GitContextView struct {
@@ -49,11 +65,24 @@ func NewIncidentView(b *EvidenceBundle, d *DiagnosisResult, state string) Incide
 		Severity:   b.Severity,
 		State:      state,
 		CreatedAt:  time.Now().UTC(),
+		Rule:       b.Rule,
 		Evidence: &EvidenceView{
-			Metrics: b.Metrics,
-			Logs:    b.Logs,
-			Events:  b.Events,
+			Metrics:       b.Metrics,
+			Logs:          b.Logs,
+			Events:        b.Events,
+			RelatedAlerts: b.RelatedAlerts,
+			ProbeFindings: b.ProbeFindings,
 		},
+	}
+	if len(b.ResourceYAML) > 0 {
+		v.Evidence.ResourceStatus = b.ResourceYAML
+	}
+	for _, rb := range b.Runbooks {
+		v.Evidence.Runbooks = append(v.Evidence.Runbooks, RunbookView{
+			Title:    rb.Title,
+			Category: rb.Category,
+			Body:     rb.Body,
+		})
 	}
 	if b.GitContext.Repo != "" || b.GitContext.Path != "" {
 		v.Evidence.GitContext = &GitContextView{
@@ -68,7 +97,74 @@ func NewIncidentView(b *EvidenceBundle, d *DiagnosisResult, state string) Incide
 			Summary:         d.Summary,
 			Confidence:      d.Confidence,
 			ProposedActions: d.ProposedActions,
+			EvidenceQuality: evidenceQuality(b),
 		}
 	}
 	return v
+}
+
+// EvidenceBundleFromView는 저장된 IncidentView로부터 재분석(재분석 실행 버튼)에 필요한
+// EvidenceBundle을 복원한다. IncidentView에 없는 Kind/Annotations/Source는 비워두는데,
+// 이들은 LLM 진단 프롬프트에 영향을 주지 않는 부가 메타데이터이기 때문이다.
+func EvidenceBundleFromView(v IncidentView) *EvidenceBundle {
+	b := &EvidenceBundle{
+		IncidentID:   v.IncidentID,
+		Alert:        v.Alert,
+		Namespace:    v.Namespace,
+		Workload:     v.Workload,
+		Pod:          v.Pod,
+		Severity:     v.Severity,
+		Metrics:      []map[string]interface{}{},
+		Logs:         []string{},
+		Events:       []string{},
+		ResourceYAML: map[string]interface{}{},
+		Rule:         v.Rule,
+	}
+	if v.Evidence != nil {
+		if v.Evidence.Metrics != nil {
+			b.Metrics = v.Evidence.Metrics
+		}
+		if v.Evidence.Logs != nil {
+			b.Logs = v.Evidence.Logs
+		}
+		if v.Evidence.Events != nil {
+			b.Events = v.Evidence.Events
+		}
+		b.RelatedAlerts = v.Evidence.RelatedAlerts
+		b.ProbeFindings = v.Evidence.ProbeFindings
+		if v.Evidence.ResourceStatus != nil {
+			b.ResourceYAML = v.Evidence.ResourceStatus
+		}
+		for _, rb := range v.Evidence.Runbooks {
+			b.Runbooks = append(b.Runbooks, RunbookMatch{Title: rb.Title, Category: rb.Category, Body: rb.Body})
+		}
+		if v.Evidence.GitContext != nil {
+			b.GitContext = GitContext{
+				Repo:       v.Evidence.GitContext.Repo,
+				Path:       v.Evidence.GitContext.Path,
+				LastCommit: v.Evidence.GitContext.LastCommit,
+			}
+		}
+	}
+	return b
+}
+
+// evidenceQuality는 수집된 근거의 충실도를 코드로 판정한다(LLM에 의존하지 않음).
+//
+//	none    — metric·log·event 모두 없음(alert 이름만으로 진단 = 조사용)
+//	partial — 일부만 존재
+//	rich    — metric과 log 모두 존재
+func evidenceQuality(b *EvidenceBundle) string {
+	m := len(b.Metrics) > 0
+	l := len(b.Logs) > 0
+	e := len(b.Events) > 0
+	p := len(b.ProbeFindings) > 0 // 결정론적 프로브 근거도 근거로 계산
+	switch {
+	case m && l:
+		return "rich"
+	case m || l || e || p:
+		return "partial"
+	default:
+		return "none"
+	}
 }

@@ -87,6 +87,15 @@ app.kubernetes.io/name: {{ include "kubesentinel-ai.name" . }}-postgres
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
+{{/* Runbooks ConfigMap 이름 (existingConfigMap 우선) */}}
+{{- define "kubesentinel-ai.runbooksConfigMap" -}}
+{{- if .Values.runbooks.existingConfigMap -}}
+{{- .Values.runbooks.existingConfigMap -}}
+{{- else -}}
+{{- printf "%s-runbooks" (include "kubesentinel-ai.fullname" .) -}}
+{{- end -}}
+{{- end -}}
+
 {{/* DATABASE DSN: database.url이 있으면 그것을, 없으면 in-chart postgres로 구성 */}}
 {{- define "kubesentinel-ai.databaseURL" -}}
 {{- if .Values.database.url -}}

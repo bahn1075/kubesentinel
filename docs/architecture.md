@@ -115,7 +115,12 @@ KubeSentinel은 **스스로 인프라를 만들지 않고, 표준 오픈소스 �
 
 ### 4.1 Signal Collector
 
-**진입점:** Alertmanager webhook receiver. 깨끗한 클러스터에서는 Alertmanager 설정에 KubeSentinel용 receiver와 매칭 룰을 추가하는 것이 배선의 핵심이다.
+**진입점:** Alertmanager로부터의 alert 수신. 두 가지 방식을 지원한다(둘 다 동일한 진단 파이프라인으로 합류).
+
+- **(a) push — webhook receiver**: Alertmanager가 `/v1/alerts`로 전송. 깨끗한 클러스터에서는 Alertmanager에 receiver+매칭 룰 추가가 배선의 핵심. (CSP 중립 표준 경로)
+- **(b) pull — Alertmanager API 폴링** *(구현됨)*: KubeSentinel이 `GET {alertmanagerURL}/api/v2/alerts`를 주기 폴링. **Alertmanager/Prometheus 설정을 전혀 바꾸지 않고** Settings의 Alertmanager URL만으로 동작. 기존 범용 관측 스택을 건드리기 싫을 때 권장. fingerprint 중복제거, `warning|critical`만, Watchdog/info 제외.
+
+> **탐지는 관측 스택에 위임**한다(설계 §1·§3). KubeSentinel은 스스로 메트릭을 스크랩하거나 리소스를 watch하지 않고, Prometheus alert rule이 정의한 모든 리소스(Pod·Node·PVC·Deployment 등)의 alert를 위 두 경로 중 하나로 받아 진단·조치하는 "두뇌" 역할이다. 따라서 감시 범위 = alert rule 커버리지.
 
 ```yaml
 # Alertmanager 설정 (kube-prometheus-stack values 경유)
@@ -183,6 +188,13 @@ spec:
 2. **Correlation Analyzer** — 최근 rollout 여부, 특정 commit 이후 발생, node/zone 편중, metric spike ↔ log error 시간 상관
 3. **LLM Analyzer** — evidence 요약 → root cause 후보 → 수정안 후보 → 영향 설명 → 검증 계획 (structured JSON 출력)
 4. **Runbook RAG** — (MVP 이후) 매니페스트 repo 내 markdown runbook + metadata. CNCF HolmesGPT 사례처럼 모델보다 runbook 품질이 조사 결과를 좌우한다.
+
+> **구현 현황 — 심층분석(L1/L2/L3):** 단발 LLM 추측을 근거 기반 분석으로 강화했다.
+> - **L1 상관분석 + 신뢰도 게이팅**: 동시 발생 alert(`related_alerts`)를 컨텍스트로 상관 추론, 근거 빈약 시 confidence↓ + 조사용 제안(코드 계산 `evidenceQuality` 뱃지).
+> - **L2 client-go 근거 수집**: 대상 리소스의 Kubernetes Events·상태·노드 상태를 read-only로 수집(§4.1의 Events/manifest 항목 구현).
+> - **L3 agentic 도구 루프 + 검증**: LLM이 read-only 도구(Prom/Loki/K8s events·pods)를 스스로 요청→조회→재분석(프롬프트 기반 JSON 프로토콜, 로컬 모델 호환) 후 검증 패스로 자기 진단 비판·보정.
+> **Rule Analyzer(1) 구현됨**: `models.ClassifyRules`가 alert명·Events·리소스 상태로 장애 유형(CrashLoopBackOff/OOMKilled/ImagePullBackOff/ControlPlaneDown 등)을 결정론적으로 분류해 LLM에 prior로 전달.
+> **Runbook(4) 구현됨(메타데이터/키워드 검색, 벡터DB 불필요)**: `internal/runbook`이 ConfigMap 마운트(`/etc/kubesentinel/runbooks`)의 markdown+frontmatter를 alertname·category로 매칭해 LLM에 주입. 상세: `implementation-status.md §3-2`.
 
 ### 4.4 Remediation Planner
 
@@ -393,7 +405,7 @@ kubesentinel-ai/
     notifier/     discord.go slack.go teams.go webhook.go
     audit/        recorder.go
   ai/             prompt_templates/ schemas/ redactor
-  charts/kubesentinel-ai/      # Helm 배포 (values로 전 환경 대응)
+  helm/kubesentinel-ai/      # Helm 배포 (values로 전 환경 대응)
   deploy/crds/ deploy/samples/ # Phase B
   docs/           architecture.md threat-model.md policy.md runbook-format.md
   examples/scenarios/          crashloop/ oomkilled/ imagepullbackoff/ ...

@@ -2,19 +2,33 @@
 # 결과 주소: https://<tailscaleHostname>.<tailnet>.ts.net
 # helm ... -f values.yaml -f values/tailscale.yaml
 # OKE는 cri-o라 short-name enforcing → 레지스트리 포함 FQN 필수
+# 이미지 태그는 날짜(YYYYMMDDHHMM)로 고정한다(불변 태그 → GitOps로 변경 추적).
+# 신규 배포 시: 이미지 빌드·push 후 아래 tag를 새 태그로 갱신 → commit → ArgoCD 자동 동기화.
 image:
   repository: docker.io/bahn1075/kubesentinel-ai
-  tag: latest
-  pullPolicy: Always
+  tag: "202609011222"
+  pullPolicy: IfNotPresent
+
+# Settings의 "Pod 재시작" 버튼(AI 설정 반영용)이 동작하려면 이 Deployment 1개로 scope된
+# patch 권한이 필요하다(helm/kubesentinel-ai/templates/rbac-restart.yaml). 기본은 off.
+rbac:
+  selfRestart:
+    enabled: true
+
+# 인시던트로 처리하지 않을 alert (상시 warning 노이즈 제외)
+collector:
+  ignoreAlerts:
+    - KubeCPUOvercommit
 frontend:
   image:
     repository: docker.io/bahn1075/kubesentinel-ai-front
-    tag: latest
-    pullPolicy: Always
+    tag: "202609081024"
+    pullPolicy: IfNotPresent
 
 ai:
   endpoint: "http://lm-studio-mac:1234/v1"
-  model: "gemma-4-26b-a4b-it-mlx"
+  # LM Studio에 현재 로드된 모델명과 일치시킨다(불일치 시 /api/ai/health 의 modelAvailable=false).
+  model: "gemma-4-31b-it-qat-optiq"
 
 tailnetEgress:
   lmStudio:

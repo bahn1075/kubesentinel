@@ -14,6 +14,7 @@ type EvidenceBundle struct {
 	Namespace    string                   `json:"namespace"`
 	Workload     string                   `json:"workload"`
 	Pod          string                   `json:"pod"`
+	Kind         string                   `json:"kind,omitempty"`
 	Severity     string                   `json:"severity,omitempty"`
 	Annotations  map[string]string        `json:"annotations,omitempty"`
 	Metrics      []map[string]interface{} `json:"metrics"`
@@ -21,6 +22,29 @@ type EvidenceBundle struct {
 	Events       []string                 `json:"events"`
 	ResourceYAML map[string]interface{}   `json:"resource_yaml"`
 	GitContext   GitContext               `json:"git_context"`
+	// 동시에 firing 중인 다른 alert들 (상관 분석용 컨텍스트). LLM에 함께 전달된다.
+	RelatedAlerts []RelatedAlert `json:"related_alerts,omitempty"`
+	// 결정론적 룰 분류(LLM 이전). LLM 컨텍스트에 prior로 포함된다.
+	Rule *RuleResult `json:"rule_classification,omitempty"`
+	// 매칭된 운영자 runbook(메타데이터/키워드 검색). 본문이 LLM 컨텍스트에 포함된다.
+	Runbooks []RunbookMatch `json:"matched_runbooks,omitempty"`
+	// 결정론적 조사 프로브 결과(예: 이미지 arch vs 노드 arch 비교). 고신뢰 근거로 LLM에 주입된다.
+	ProbeFindings []string `json:"probe_findings,omitempty"`
+}
+
+// RunbookMatch는 인시던트에 매칭된 runbook입니다.
+type RunbookMatch struct {
+	Title    string `json:"title"`
+	Category string `json:"category,omitempty"`
+	Body     string `json:"body,omitempty"`
+}
+
+// RelatedAlert는 상관 분석을 위한 동시 발생 alert의 요약입니다.
+type RelatedAlert struct {
+	Alertname string `json:"alertname"`
+	Namespace string `json:"namespace"`
+	Severity  string `json:"severity"`
+	Summary   string `json:"summary"`
 }
 
 // GitContext는 대상 워크로드의 git 매니페스트 컨텍스트입니다.
@@ -44,14 +68,29 @@ func NewEvidenceBundle(payload AlertmanagerPayload) *EvidenceBundle {
 	pod := alert.Labels["pod"]
 	severity := alert.Labels["severity"]
 
-	// 워크로드 추정: deployment/statefulset/job 라벨 우선, 없으면 pod 사용
+	// 워크로드/종류 추정: 라벨 우선순위대로. kind는 client-go 수집 시 분기용.
 	workload := firstNonEmpty(
 		alert.Labels["deployment"],
 		alert.Labels["workload"],
 		alert.Labels["statefulset"],
+		alert.Labels["daemonset"],
 		alert.Labels["job"],
+		alert.Labels["job_name"],
 		pod,
 	)
+	kind := ""
+	switch {
+	case alert.Labels["deployment"] != "":
+		kind = "Deployment"
+	case alert.Labels["statefulset"] != "":
+		kind = "StatefulSet"
+	case alert.Labels["daemonset"] != "":
+		kind = "DaemonSet"
+	case alert.Labels["job"] != "" || alert.Labels["job_name"] != "":
+		kind = "Job"
+	case pod != "":
+		kind = "Pod"
+	}
 
 	source := payload.Receiver
 	if source == "" {
@@ -65,6 +104,7 @@ func NewEvidenceBundle(payload AlertmanagerPayload) *EvidenceBundle {
 		Namespace:    namespace,
 		Workload:     workload,
 		Pod:          pod,
+		Kind:         kind,
 		Severity:     severity,
 		Annotations:  alert.Annotations,
 		Metrics:      []map[string]interface{}{},
