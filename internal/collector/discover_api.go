@@ -63,9 +63,19 @@ var discoverRules = []svcRule{
 		portNames:   []string{"http-metrics", "http", "grpc"},
 		portNumbers: []int32{3100, 80},
 		exclude:     []string{"promtail", "canary", "memberlist", "headless", "alloy"},
-		installHint: "Loki가 없습니다. 로그 수집이 필요하면 설치를 진행하세요: " +
+		// 주의: grafana/loki-stack 차트는 deprecated이며 Loki 2.6.1을 배포한다.
+		// Grafana 13.x의 데이터소스 health check는 LogQL `vector(1)+vector(1)`를 보내는데
+		// 이 함수는 Loki 2.9에서 추가되어 2.6.1에서는 400 parse error가 나고,
+		// Grafana가 "Unable to connect with Loki"라는 일반 메시지로 표시한다.
+		// → 현행 grafana/loki 차트(Loki 3.x)를 안내한다.
+		installHint: "Loki가 없습니다. 로그 수집이 필요하면 현행 차트로 설치하세요: " +
 			"helm repo add grafana https://grafana.github.io/helm-charts && " +
-			"helm install loki grafana/loki-stack -n monitoring --create-namespace",
+			"helm install loki grafana/loki -n monitoring --create-namespace " +
+			"--set deploymentMode=SingleBinary --set singleBinary.replicas=1 " +
+			"--set loki.commonConfig.replication_factor=1 --set loki.storage.type=filesystem " +
+			"--set loki.auth_enabled=false. " +
+			"deprecated된 grafana/loki-stack은 Loki 2.6.1을 설치해 Grafana 연결이 실패하니 쓰지 마세요. " +
+			"이 차트는 수집기를 포함하지 않으므로 로그 수집에는 grafana/alloy를 별도 설치해야 합니다.",
 	},
 	{
 		key: "alertmanager", label: "Alertmanager",
