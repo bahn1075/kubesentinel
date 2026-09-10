@@ -100,6 +100,7 @@ func (s *WebhookServer) Start() error {
 	mux.HandleFunc("/api/incidents/", s.handleIncidentDetail)
 	mux.HandleFunc("/api/ignores", s.handleIgnores)
 	mux.HandleFunc("/api/ignores/", s.handleIgnoreDetail)
+	mux.HandleFunc("/api/collector/discover", s.handleCollectorDiscover)
 	mux.HandleFunc("/api/ai/status", s.handleAIStatus)
 	mux.HandleFunc("/api/ai/health", s.handleAIHealth)
 	mux.HandleFunc("/api/ai/restart", s.handleAIRestart)

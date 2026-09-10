@@ -124,3 +124,22 @@ export interface ProviderSettings {
   notifier: { type: string };
   git: { provider: string; authMethod: string; repository: string; baseBranch: string };
 }
+
+// ── Collector 자동조회 (GET /api/collector/discover) ──────────────
+// 백엔드가 현재 클러스터의 Service를 훑어 관측 스택 주소를 추정한 결과.
+export interface DiscoveredEndpoint {
+  key: "prometheus" | "loki" | "alertmanager" | "grafana";
+  label: string;
+  url?: string;          // 채택된 in-cluster 주소
+  service?: string;      // <namespace>/<name>:<port>
+  candidates?: string[]; // 동일 역할로 보이는 다른 후보
+  installHint?: string;  // 미검출 시 설치 안내
+}
+
+export interface DiscoverResult {
+  found: DiscoveredEndpoint[];
+  missing: DiscoveredEndpoint[];
+  scannedServices: number;
+  available: boolean;    // in-cluster API 접근 가능 여부
+  error?: string;
+}

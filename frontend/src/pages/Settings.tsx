@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { Info, Sun, Moon } from "@phosphor-icons/react";
+import { Info, Sun, Moon, MagnifyingGlass, CheckCircle, Warning } from "@phosphor-icons/react";
 import { applyTheme, getTheme, type Theme } from "../lib/theme";
 import type { ProviderSettings } from "../api/types";
 import {
   fetchSettings, saveSettings, fetchAIStatus, checkAIHealth, restartAIPod,
-  fetchSecretsStatus, saveSecrets,
+  fetchSecretsStatus, saveSecrets, discoverCollectorEndpoints,
   type AIStatus, type AIHealth, type SecretsStatus,
 } from "../api/client";
+import type { DiscoverResult } from "../api/types";
 import Skeleton from "../components/Skeleton";
 
 // frontier provider별 기본 엔드포인트 (OpenAI 호환 base)
@@ -47,6 +48,33 @@ export default function Settings() {
   const [restarting, setRestarting] = useState(false);
   const [restartMsg, setRestartMsg] = useState<string | null>(null);
   const [restartErr, setRestartErr] = useState<string | null>(null);
+
+  // Collector 자동조회 (클러스터 Service 스캔 → 입력란 자동 채움)
+  const [discovering, setDiscovering] = useState(false);
+  const [discovered, setDiscovered] = useState<DiscoverResult | null>(null);
+  const [discoverErr, setDiscoverErr] = useState<string | null>(null);
+
+  async function onDiscover() {
+    setDiscovering(true); setDiscoverErr(null); setDiscovered(null);
+    try {
+      const res = await discoverCollectorEndpoints();
+      setDiscovered(res);
+      // 찾은 항목만 입력란에 반영한다(미검출 항목의 기존 값은 지우지 않는다).
+      const patch: Partial<ProviderSettings["collector"]> = {};
+      for (const e of res.found) {
+        if (!e.url) continue;
+        if (e.key === "prometheus") patch.prometheusUrl = e.url;
+        if (e.key === "loki") patch.lokiUrl = e.url;
+        if (e.key === "alertmanager") patch.alertmanagerUrl = e.url;
+        if (e.key === "grafana") patch.grafanaUrl = e.url;
+      }
+      if (Object.keys(patch).length > 0) update("collector", patch);
+    } catch (e) {
+      setDiscoverErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDiscovering(false);
+    }
+  }
 
   // 화면 테마 (브라우저별 localStorage 저장, 백엔드 DB와 무관)
   const [theme, setTheme] = useState<Theme>(getTheme());
@@ -296,7 +324,14 @@ export default function Settings() {
 
       {/* ── Collector ── */}
       <div className="section">
-        <h3>Collector</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+          <h3 style={{ margin: 0 }}>Collector</h3>
+          <button type="button" onClick={onDiscover} disabled={discovering}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <MagnifyingGlass size={14} aria-hidden />
+            {discovering ? "조회 중" : "현재 클러스터에서 자동조회"}
+          </button>
+        </div>
         <div className="form-grid">
           <label>Prometheus</label>
           <input value={s.collector.prometheusUrl} placeholder="http://prometheus-operated.monitoring.svc:9090"
@@ -311,6 +346,54 @@ export default function Settings() {
           <input value={s.collector.grafanaUrl} placeholder="(선택) 알림 딥링크용"
             onChange={(e) => update("collector", { grafanaUrl: e.target.value })} />
         </div>
+        {discoverErr && <div className="test-result err">자동조회 실패: {discoverErr}</div>}
+
+        {discovered && !discovered.available && (
+          <div className="test-result err">
+            {discovered.error || "자동조회를 사용할 수 없습니다."}
+          </div>
+        )}
+
+        {discovered && discovered.available && (
+          <div className="test-result" style={{ background: "var(--surface-2)" }}>
+            <div style={{ marginBottom: discovered.found.length || discovered.missing.length ? 10 : 0 }}>
+              Service {discovered.scannedServices}개를 검토했습니다.
+              {" "}검출 {discovered.found.length}건 · 미검출 {discovered.missing.length}건
+            </div>
+
+            {discovered.found.map((e) => (
+              <div key={e.key} style={{ display: "flex", gap: 7, marginBottom: 6 }}>
+                <CheckCircle size={15} color="var(--ok-text)" aria-hidden style={{ flex: "none", marginTop: 2 }} />
+                <span>
+                  <b>{e.label}</b> <span className="muted">{e.service}</span>
+                  <div className="mono" style={{ fontSize: 12 }}>{e.url}</div>
+                  {e.candidates && e.candidates.length > 0 && (
+                    <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
+                      다른 후보: {e.candidates.join(", ")}
+                    </div>
+                  )}
+                </span>
+              </div>
+            ))}
+
+            {discovered.missing.map((e) => (
+              <div key={e.key} style={{ display: "flex", gap: 7, marginBottom: 6 }}>
+                <Warning size={15} color="var(--warn)" aria-hidden style={{ flex: "none", marginTop: 2 }} />
+                <span>
+                  <b>{e.label} 미검출</b>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>{e.installHint}</div>
+                </span>
+              </div>
+            ))}
+
+            {discovered.found.length > 0 && (
+              <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                검출된 주소를 위 입력란에 채웠습니다. 확인 후 <b>저장</b>하세요.
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="test-result" style={{ display: "flex", gap: 8 }}>
           <Info size={16} color="var(--accent-text)" aria-hidden style={{ flex: "none", marginTop: 2 }} />
           <div>

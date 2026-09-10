@@ -1,4 +1,4 @@
-import type { Incident, RemediationPolicy, ProviderSettings, IgnoreRule, IgnoreList } from "./types";
+import type { Incident, RemediationPolicy, ProviderSettings, IgnoreRule, IgnoreList, DiscoverResult } from "./types";
 import { mockIncidents, mockPolicies, mockSettings } from "./mock";
 
 // 백엔드 API가 아직 없으므로 기본은 MOCK 모드.
@@ -150,4 +150,10 @@ export async function checkAIHealth(endpoint?: string): Promise<AIHealth> {
 // 이 앱 자신의 Deployment를 rollout-restart한다(저장된 AI 설정을 반영). RBAC 미부여 시 에러.
 export async function restartAIPod(): Promise<void> {
   await sendJSON("POST", "/ai/restart");
+}
+
+// 현재 클러스터의 Service를 훑어 관측 스택(Prometheus/Loki/Alertmanager/Grafana) 주소를 추정한다.
+// in-cluster가 아니면 available=false로 응답한다(로컬 docker compose 실행 시 미지원).
+export async function discoverCollectorEndpoints(): Promise<DiscoverResult> {
+  return getJSON<DiscoverResult>("/collector/discover");
 }
