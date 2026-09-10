@@ -20,6 +20,14 @@ spec:
   destination:
     server: https://kubernetes.default.svc   # oke 자기 자신(in-cluster)
     namespace: kubesentinel
+  ignoreDifferences:
+    - group: ""
+      kind: Service
+      name: lm-studio-mac
+      namespace: kubesentinel
+      jsonPointers:
+        - /spec/externalName
+        - /metadata/finalizers
   syncPolicy:
     automated:
       prune: true
