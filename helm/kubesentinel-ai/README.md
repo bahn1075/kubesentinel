@@ -304,6 +304,7 @@ helm upgrade --install kubesentinel helm/kubesentinel-ai -n kubesentinel --creat
 | LLM 호출 타임아웃 | `localhost`로 설정됨 | `host.minikube.internal`로 변경 |
 | 알림 전송 실패 경고 | `notify-sink` 미배포 | mock 스택 배포 또는 `--set secret.notifierWebhook=` |
 | Settings의 "Pod 재시작" 버튼이 503 | `rbac.selfRestart` 기본 off | `--set rbac.selfRestart.enabled=true` |
+| Grafana에서 Loki 데이터소스가 `Unable to connect with Loki` | **Loki 버전이 너무 낮음** (아래 설명) | 현행 `grafana/loki` 차트로 재설치 |
 
 ### 다중 노드에서 postgres가 기동하지 못하는 이유
 
@@ -330,6 +331,38 @@ postgres:
 > 노드를 옮기면 이전 노드의 데이터에 접근할 수 없어 **DB가 새로 초기화**됩니다.
 > 백엔드는 기동 시에만 마이그레이션을 적용하므로, 파드를 재생성해 스키마를 복원하세요.
 > `kubectl -n kubesentinel delete pod -l app.kubernetes.io/name=kubesentinel-ai`
+
+### Grafana에서 Loki 연결이 실패할 때 (`Unable to connect with Loki`)
+
+**연결 문제가 아니라 Loki 버전 문제인 경우가 많습니다.** Grafana 13.x는 데이터소스
+health check로 LogQL `vector(1)+vector(1)`를 보내는데, `vector()` 함수는 **Loki 2.9**에서
+추가되었습니다. 그보다 낮은 버전은 다음과 같이 400을 반환하고, Grafana는 이를
+연결 실패라는 일반 메시지로 표시합니다.
+
+```
+parse error at line 1, col 1: syntax error: unexpected IDENTIFIER
+```
+
+Grafana 파드 로그를 보면 실제 원인이 나옵니다(에러 메시지가 "check the server logs"라고
+안내하는 이유입니다).
+
+```bash
+kubectl -n monitoring logs deploy/<grafana> -c grafana | grep "Loki health check"
+```
+
+먼저 버전을 확인하세요.
+
+```bash
+kubectl -n monitoring exec deploy/<loki-gateway> -- \
+  wget -qO- http://localhost/loki/api/v1/status/buildinfo
+```
+
+> **deprecated된 `grafana/loki-stack` 차트를 쓰지 마세요.** 이 차트는 Loki **2.6.1**을
+> 배포해 위 문제가 발생합니다. 현행 `grafana/loki` 차트(Loki 3.x)를 쓰세요.
+> 단, 현행 차트는 수집기를 포함하지 않으므로 로그 수집에는 `grafana/alloy`가 필요하고,
+> 서비스명이 `<release>-loki-gateway`(포트 80)로 바뀝니다.
+
+Settings의 **자동조회**는 `loki-gateway`를 1순위로 잡으므로 재설치 후 그대로 동작합니다.
 
 상태 확인 일괄 명령:
 
