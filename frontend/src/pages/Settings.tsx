@@ -61,7 +61,7 @@ export default function Settings() {
       setDiscovered(res);
       // 찾은 항목만 입력란에 반영한다(미검출 항목의 기존 값은 지우지 않는다).
       const patch: Partial<ProviderSettings["collector"]> = {};
-      for (const e of res.found) {
+      for (const e of res.found ?? []) {
         if (!e.url) continue;
         if (e.key === "prometheus") patch.prometheusUrl = e.url;
         if (e.key === "loki") patch.lokiUrl = e.url;
@@ -354,14 +354,18 @@ export default function Settings() {
           </div>
         )}
 
-        {discovered && discovered.available && (
+        {discovered && discovered.available && (() => {
+          // 백엔드가 null을 줄 수 있으므로 항상 배열로 정규화한다.
+          const found = discovered.found ?? [];
+          const missing = discovered.missing ?? [];
+          return (
           <div className="test-result" style={{ background: "var(--surface-2)" }}>
-            <div style={{ marginBottom: discovered.found.length || discovered.missing.length ? 10 : 0 }}>
+            <div style={{ marginBottom: found.length || missing.length ? 10 : 0 }}>
               Service {discovered.scannedServices}개를 검토했습니다.
-              {" "}검출 {discovered.found.length}건 · 미검출 {discovered.missing.length}건
+              {" "}검출 {found.length}건 · 미검출 {missing.length}건
             </div>
 
-            {discovered.found.map((e) => (
+            {found.map((e) => (
               <div key={e.key} style={{ display: "flex", gap: 7, marginBottom: 6 }}>
                 <CheckCircle size={15} color="var(--ok-text)" aria-hidden style={{ flex: "none", marginTop: 2 }} />
                 <span>
@@ -376,7 +380,7 @@ export default function Settings() {
               </div>
             ))}
 
-            {discovered.missing.map((e) => (
+            {missing.map((e) => (
               <div key={e.key} style={{ display: "flex", gap: 7, marginBottom: 6 }}>
                 <Warning size={15} color="var(--warn)" aria-hidden style={{ flex: "none", marginTop: 2 }} />
                 <span>
@@ -386,13 +390,14 @@ export default function Settings() {
               </div>
             ))}
 
-            {discovered.found.length > 0 && (
+            {found.length > 0 && (
               <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
                 검출된 주소를 위 입력란에 채웠습니다. 확인 후 <b>저장</b>하세요.
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
 
         <div className="test-result" style={{ display: "flex", gap: 8 }}>
           <Info size={16} color="var(--accent-text)" aria-hidden style={{ flex: "none", marginTop: 2 }} />

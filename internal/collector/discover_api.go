@@ -24,6 +24,8 @@ type DiscoveredEndpoint struct {
 
 // DiscoverResult는 GET /api/collector/discover 응답입니다.
 type DiscoverResult struct {
+	// Found/Missing은 항상 배열로 직렬화한다(빈 슬라이스로 초기화 — nil이면 JSON null이 되어
+	// 프론트엔드가 .length/.map에서 터진다). 아래 handleCollectorDiscover 참조.
 	Found     []DiscoveredEndpoint `json:"found"`
 	Missing   []DiscoveredEndpoint `json:"missing"`
 	Scanned   int                  `json:"scannedServices"`
@@ -100,6 +102,8 @@ func (s *WebhookServer) handleCollectorDiscover(w http.ResponseWriter, r *http.R
 	if kube == nil || kube.cs == nil {
 		writeJSON(w, http.StatusOK, DiscoverResult{
 			Available: false,
+			Found:     []DiscoveredEndpoint{},
+			Missing:   []DiscoveredEndpoint{},
 			Error: "in-cluster Kubernetes API에 연결할 수 없습니다. " +
 				"자동조회는 클러스터 안에서 실행될 때만 동작합니다(로컬 docker compose 실행 시 미지원).",
 		})
@@ -113,12 +117,20 @@ func (s *WebhookServer) handleCollectorDiscover(w http.ResponseWriter, r *http.R
 	if err != nil {
 		writeJSON(w, http.StatusOK, DiscoverResult{
 			Available: false,
+			Found:     []DiscoveredEndpoint{},
+			Missing:   []DiscoveredEndpoint{},
 			Error:     fmt.Sprintf("Service 목록 조회 실패(RBAC 확인 필요): %v", err),
 		})
 		return
 	}
 
-	res := DiscoverResult{Available: true, Scanned: len(list.Items)}
+	// nil 슬라이스는 JSON null로 직렬화되므로 빈 배열로 초기화한다.
+	res := DiscoverResult{
+		Available: true,
+		Scanned:   len(list.Items),
+		Found:     []DiscoveredEndpoint{},
+		Missing:   []DiscoveredEndpoint{},
+	}
 	for _, rule := range discoverRules {
 		if hit := matchService(rule, list.Items); hit.URL != "" {
 			res.Found = append(res.Found, hit)

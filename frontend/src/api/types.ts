@@ -137,8 +137,10 @@ export interface DiscoveredEndpoint {
 }
 
 export interface DiscoverResult {
-  found: DiscoveredEndpoint[];
-  missing: DiscoveredEndpoint[];
+  // Go의 nil 슬라이스가 JSON null로 직렬화될 수 있어 nullable로 둔다.
+  // 백엔드는 빈 배열을 보내도록 고쳤지만, 타입으로도 가드해 흰 화면(렌더 예외)을 막는다.
+  found: DiscoveredEndpoint[] | null;
+  missing: DiscoveredEndpoint[] | null;
   scannedServices: number;
   available: boolean;    // in-cluster API 접근 가능 여부
   error?: string;
