@@ -32,6 +32,18 @@ type WebhookServer struct {
 	// ignoreRules는 사용자 관리(DB) 무시 규칙 캐시다(keyword 부분일치). API 변경 시 갱신된다.
 	ignoreMu    sync.RWMutex
 	ignoreRules []models.IgnoreRule
+
+	// reanalyze는 비동기 AI 재분석 작업의 진행 상태다(reanalyze_job.go).
+	// 지연 초기화하므로 직접 접근하지 말고 reanalyzeJobs()를 쓴다.
+	reanalyzeOnce  sync.Once
+	reanalyzeJobsV *reanalyzeJobs
+}
+
+// reanalyze는 재분석 작업 관리자를 반환한다(최초 사용 시 초기화).
+// WebhookServer가 구조체 리터럴로 생성되므로 생성자에서 초기화할 수 없다.
+func (s *WebhookServer) reanalyzeMgr() *reanalyzeJobs {
+	s.reanalyzeOnce.Do(func() { s.reanalyzeJobsV = newReanalyzeJobs() })
+	return s.reanalyzeJobsV
 }
 
 // RefreshIgnoreRules는 DB의 무시 규칙을 캐시에 다시 로드한다(기동 시 + API 변경 시).

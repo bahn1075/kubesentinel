@@ -1,4 +1,4 @@
-import type { Incident, RemediationPolicy, ProviderSettings, IgnoreRule, IgnoreList, DiscoverResult } from "./types";
+import type { Incident, RemediationPolicy, ProviderSettings, IgnoreRule, IgnoreList, DiscoverResult, ReanalyzeStatus, IncidentFilter, IncidentCounts } from "./types";
 import { mockIncidents, mockPolicies, mockSettings } from "./mock";
 
 // 백엔드 API가 아직 없으므로 기본은 MOCK 모드.
@@ -53,9 +53,9 @@ export async function deleteIgnore(id: number): Promise<void> {
 }
 
 // Incidents는 백엔드(DB)에서 조회한다. 백엔드가 없으면 mock으로 폴백(dev 편의).
-export async function fetchIncidents(): Promise<Incident[]> {
+export async function fetchIncidents(filter: IncidentFilter = "open"): Promise<Incident[]> {
   try {
-    return await getJSON<Incident[]>("/incidents");
+    return await getJSON<Incident[]>(`/incidents?filter=${filter}`);
   } catch {
     return mockIncidents;
   }
@@ -71,8 +71,24 @@ export async function fetchIncident(id: string): Promise<Incident | undefined> {
 
 // AI 진단이 없는(당시 LLM 연결 실패 등) 인시던트를, 이미 수집된 근거로 재분석한다.
 // 근거를 다시 모으지 않고 저장된 evidence로 LLM만 다시 호출한다.
-export async function reanalyzeIncident(id: string): Promise<Incident> {
-  return sendJSON<Incident>("POST", `/incidents/${encodeURIComponent(id)}/reanalyze`);
+// AI 재분석 작업을 시작한다. 즉시 202로 돌아오고 분석은 백엔드에서 계속된다.
+// 이미 실행 중이면 409가 오는데, 그것도 "실행 중"이므로 오류로 취급하지 않는다.
+export async function startReanalyze(id: string): Promise<ReanalyzeStatus> {
+  const res = await fetch(`${API_BASE}/incidents/${encodeURIComponent(id)}/reanalyze`, {
+    method: "POST",
+  });
+  if (res.status === 202 || res.status === 409) return res.json() as Promise<ReanalyzeStatus>;
+  throw new Error(`API POST /incidents/${id}/reanalyze → ${res.status}`);
+}
+
+// 재분석 진행 상태를 조회한다(폴링용).
+export async function fetchReanalyzeStatus(id: string): Promise<ReanalyzeStatus> {
+  return getJSON<ReanalyzeStatus>(`/incidents/${encodeURIComponent(id)}/reanalyze`);
+}
+
+// 탭 배지용 필터별 건수. 실패하면 배지를 숨기면 되므로 호출자가 처리한다.
+export async function fetchIncidentCounts(): Promise<IncidentCounts> {
+  return getJSON<IncidentCounts>("/incidents/counts");
 }
 
 export async function fetchPolicies(): Promise<RemediationPolicy[]> {

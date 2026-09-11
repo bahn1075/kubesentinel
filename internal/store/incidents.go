@@ -25,12 +25,28 @@ func (s *Store) SaveIncident(v models.IncidentView) error {
 	return nil
 }
 
+// 인시던트 목록 필터. 화면의 탭과 1:1 대응한다.
+const (
+	IncidentFilterOpen = "open"         // 확인되지 않은 인시던트 (기본)
+	IncidentFilterAck  = "acknowledged" // 확인됨 처리된 과거 기록
+	IncidentFilterAll  = "all"          // 전체
+)
+
 // ListIncidents는 최신순으로 인시던트 JSON을 반환합니다.
-func (s *Store) ListIncidents(limit int) ([]json.RawMessage, error) {
+// filter가 빈 값이거나 알 수 없는 값이면 open으로 취급한다(기존 동작 유지).
+func (s *Store) ListIncidents(limit int, filter string) ([]json.RawMessage, error) {
 	if limit <= 0 {
 		limit = 100
 	}
-	rows, err := s.db.Query(`SELECT data FROM incidents WHERE NOT acknowledged ORDER BY created_at DESC LIMIT $1`, limit)
+	where := "WHERE NOT acknowledged"
+	switch filter {
+	case IncidentFilterAck:
+		where = "WHERE acknowledged"
+	case IncidentFilterAll:
+		where = ""
+	}
+	rows, err := s.db.Query(
+		`SELECT data FROM incidents `+where+` ORDER BY created_at DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list incidents: %w", err)
 	}
@@ -70,4 +86,25 @@ func (s *Store) GetIncident(id string) (json.RawMessage, error) {
 		return nil, fmt.Errorf("get incident: %w", err)
 	}
 	return json.RawMessage(raw), nil
+}
+
+// IncidentCounts는 탭 배지에 표시할 건수입니다.
+type IncidentCounts struct {
+	Open         int `json:"open"`
+	Acknowledged int `json:"acknowledged"`
+	All          int `json:"all"`
+}
+
+// CountIncidents는 필터별 인시던트 건수를 한 번의 쿼리로 반환합니다.
+func (s *Store) CountIncidents() (IncidentCounts, error) {
+	var c IncidentCounts
+	err := s.db.QueryRow(`
+		SELECT count(*) FILTER (WHERE NOT acknowledged),
+		       count(*) FILTER (WHERE acknowledged),
+		       count(*)
+		FROM incidents`).Scan(&c.Open, &c.Acknowledged, &c.All)
+	if err != nil {
+		return c, fmt.Errorf("count incidents: %w", err)
+	}
+	return c, nil
 }
