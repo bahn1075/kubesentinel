@@ -27,6 +27,12 @@ ai:
   allowExternal: false  # 외부 모델 전송 허용 (사내 규정에 따라)
   redactSecrets: true
   language: ko          # AI 진단 응답 언어: en|ko|zh|la|ja|fr|de
+  # 동시에 수행할 AI 분석 개수.
+  # 로컬 모델(LM Studio·Ollama)은 동시 요청을 처리하지 못해, alert가 몰리면
+  # (Alertmanager 폴러가 30초마다 여러 건을 띄운다) 개별 LLM 호출이 HTTP 타임아웃을
+  # 넘겨 전부 실패한다. 기본 1로 직렬화하고, 처리량이 필요한 frontier provider에서는
+  # 값을 올린다. 초과 요청은 거부되지 않고 순서를 기다린다.
+  maxConcurrent: 1
 
 # ── Tailnet egress targets (Tailscale Kubernetes Operator) ────────
 # enabled=true면 tailnet 장비/서비스를 클러스터 Service DNS로 노출한다.

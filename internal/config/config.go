@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -53,6 +54,13 @@ type AIConfig struct {
 	MaxInputTokens int    `yaml:"max_input_tokens"`
 	// Language는 AI 진단 응답의 자연어 필드를 쓸 언어다(en|ko|zh|la|ja|fr|de). 비어있으면 모델 기본값.
 	Language string `yaml:"language"`
+	// MaxConcurrent는 동시에 수행할 AI 분석 개수다(0 또는 미설정 시 1).
+	//
+	// 로컬 모델(LM Studio·Ollama)은 동시 요청을 처리하지 못해, alert가 몰리면 개별 호출이
+	// HTTP 타임아웃을 넘겨 전부 실패한다(실측: 4건 동시 → 모두 context deadline exceeded).
+	// 기본 1로 직렬화하고, 처리량이 필요한 frontier provider에서는 값을 올린다.
+	// 초과 요청은 거부하지 않고 순서를 기다린다(분석은 비동기라 대기가 응답을 막지 않는다).
+	MaxConcurrent int `yaml:"max_concurrent"`
 }
 
 // GitOpsConfig는 Git 연동 및 PR 생성 설정을 담습니다. (architecture.md §4.5 반영)
@@ -105,6 +113,11 @@ func LoadConfig() (*Config, error) {
 	}
 	if val := os.Getenv("KUBESENTINEL_AI_MODEL"); val != "" {
 		cfg.AI.Model = val
+	}
+	if val := os.Getenv("KUBESENTINEL_AI_MAX_CONCURRENT"); val != "" {
+		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+			cfg.AI.MaxConcurrent = n
+		}
 	}
 	if val := os.Getenv("KUBESENTINEL_AI_LANGUAGE"); val != "" {
 		cfg.AI.Language = val

@@ -33,6 +33,11 @@ type WebhookServer struct {
 	ignoreMu    sync.RWMutex
 	ignoreRules []models.IgnoreRule
 
+	// gateV는 동시 분석 개수 제한 게이트다(analysis_gate.go).
+	// 구조체 리터럴로 생성되므로 지연 초기화한다 — 직접 접근하지 말고 gate()를 쓴다.
+	gateOnce sync.Once
+	gateV    *analysisGate
+
 	// reanalyze는 비동기 AI 재분석 작업의 진행 상태다(reanalyze_job.go).
 	// 지연 초기화하므로 직접 접근하지 말고 reanalyzeJobs()를 쓴다.
 	reanalyzeOnce  sync.Once

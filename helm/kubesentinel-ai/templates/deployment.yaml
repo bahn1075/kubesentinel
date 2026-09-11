@@ -50,6 +50,8 @@ spec:
               value: {{ .Values.ai.model | quote }}
             - name: KUBESENTINEL_AI_LANGUAGE
               value: {{ .Values.ai.language | quote }}
+            - name: KUBESENTINEL_AI_MAX_CONCURRENT
+              value: {{ .Values.ai.maxConcurrent | quote }}
             - name: KUBESENTINEL_AI_PROMETHEUS_URL
               value: {{ .Values.collector.prometheusUrl | quote }}
             - name: KUBESENTINEL_AI_LOKI_URL

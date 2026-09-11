@@ -20,7 +20,8 @@ func (s *WebhookServer) processBundle(b *models.EvidenceBundle) {
 		s.Enricher.Enrich(b)
 	}
 
-	result, err := s.Engine.Analyze(b)
+	// 동시 실행 제한을 적용한다(로컬 LLM 포화 방지 — analysis_gate.go).
+	result, err := s.analyzeGated(b)
 	state := "DiagnosisCompleted"
 	if err != nil {
 		fmt.Printf("[KubeSentinel] ❌ Analysis Failed: %v\n", err)
