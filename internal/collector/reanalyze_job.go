@@ -92,7 +92,7 @@ func (r *reanalyzeJobs) get(id string) (reanalyzeJob, bool) {
 func (s *WebhookServer) runReanalyze(id string, view models.IncidentView) {
 	bundle := models.EvidenceBundleFromView(view)
 
-	result, err := s.Engine.Analyze(bundle)
+	result, err := s.analyzeGated(bundle)
 	if err != nil {
 		fmt.Printf("[KubeSentinel] ⚠️  재분석 실패 (%s): %v\n", id, err)
 		s.reanalyzeMgr().finish(id, fmt.Errorf("AI 연결을 확인하세요: %w", err))
