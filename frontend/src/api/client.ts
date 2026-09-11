@@ -1,4 +1,4 @@
-import type { Incident, RemediationPolicy, ProviderSettings, IgnoreRule, IgnoreList, DiscoverResult, ReanalyzeStatus } from "./types";
+import type { Incident, RemediationPolicy, ProviderSettings, IgnoreRule, IgnoreList, DiscoverResult, ReanalyzeStatus, IncidentFilter, IncidentCounts } from "./types";
 import { mockIncidents, mockPolicies, mockSettings } from "./mock";
 
 // 백엔드 API가 아직 없으므로 기본은 MOCK 모드.
@@ -53,9 +53,9 @@ export async function deleteIgnore(id: number): Promise<void> {
 }
 
 // Incidents는 백엔드(DB)에서 조회한다. 백엔드가 없으면 mock으로 폴백(dev 편의).
-export async function fetchIncidents(): Promise<Incident[]> {
+export async function fetchIncidents(filter: IncidentFilter = "open"): Promise<Incident[]> {
   try {
-    return await getJSON<Incident[]>("/incidents");
+    return await getJSON<Incident[]>(`/incidents?filter=${filter}`);
   } catch {
     return mockIncidents;
   }
@@ -84,6 +84,11 @@ export async function startReanalyze(id: string): Promise<ReanalyzeStatus> {
 // 재분석 진행 상태를 조회한다(폴링용).
 export async function fetchReanalyzeStatus(id: string): Promise<ReanalyzeStatus> {
   return getJSON<ReanalyzeStatus>(`/incidents/${encodeURIComponent(id)}/reanalyze`);
+}
+
+// 탭 배지용 필터별 건수. 실패하면 배지를 숨기면 되므로 호출자가 처리한다.
+export async function fetchIncidentCounts(): Promise<IncidentCounts> {
+  return getJSON<IncidentCounts>("/incidents/counts");
 }
 
 export async function fetchPolicies(): Promise<RemediationPolicy[]> {

@@ -9,6 +9,11 @@ import (
 )
 
 // handleIncidents는 인시던트 목록을 반환합니다. GET /api/incidents
+//
+//	?filter=open|acknowledged|all : 화면 탭과 대응. 미지정 시 open(기존 동작).
+//	  - open         : 확인되지 않은 인시던트
+//	  - acknowledged : 확인됨 처리된 과거 기록
+//	  - all          : 전체
 func (s *WebhookServer) handleIncidents(w http.ResponseWriter, r *http.Request) {
 	if s.Store == nil {
 		http.Error(w, "store not configured (DATABASE_URL 미설정)", http.StatusServiceUnavailable)
@@ -18,12 +23,30 @@ func (s *WebhookServer) handleIncidents(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	list, err := s.Store.ListIncidents(100)
+	list, err := s.Store.ListIncidents(100, r.URL.Query().Get("filter"))
 	if err != nil {
 		http.Error(w, "failed to list incidents: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusOK, list)
+}
+
+// handleIncidentCounts는 탭 배지에 쓸 필터별 건수를 반환합니다. GET /api/incidents/counts
+func (s *WebhookServer) handleIncidentCounts(w http.ResponseWriter, r *http.Request) {
+	if s.Store == nil {
+		http.Error(w, "store not configured (DATABASE_URL 미설정)", http.StatusServiceUnavailable)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	counts, err := s.Store.CountIncidents()
+	if err != nil {
+		http.Error(w, "failed to count incidents: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, counts)
 }
 
 // handleIncidentDetail은 단일 인시던트를 반환합니다. GET /api/incidents/{id}
@@ -35,6 +58,12 @@ func (s *WebhookServer) handleIncidentDetail(w http.ResponseWriter, r *http.Requ
 	id := strings.TrimPrefix(r.URL.Path, "/api/incidents/")
 	if id == "" {
 		http.Error(w, "incident id required", http.StatusBadRequest)
+		return
+	}
+
+	// /api/incidents/counts 는 인시던트 ID가 아니라 집계 엔드포인트다.
+	if id == "counts" {
+		s.handleIncidentCounts(w, r)
 		return
 	}
 

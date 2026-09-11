@@ -155,3 +155,12 @@ export interface ReanalyzeStatus {
   error?: string;
 }
 
+// ── 인시던트 목록 필터 (화면 탭) ───────────────────────────────────
+export type IncidentFilter = "open" | "acknowledged" | "all";
+
+// 탭 배지에 표시할 필터별 건수 (GET /api/incidents/counts)
+export interface IncidentCounts {
+  open: number;
+  acknowledged: number;
+  all: number;
+}
