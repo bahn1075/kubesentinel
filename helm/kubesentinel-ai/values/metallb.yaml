@@ -18,6 +18,21 @@ ai:
 secret:
   notifierWebhook: "http://notify-sink:8080/"
 
+collector:
+  # minikube 상시 노이즈 alert. kube-prometheus-stack은 scheduler/controller-manager/etcd의
+  # 메트릭 엔드포인트를 표준 포트에서 기대하는데 minikube는 그렇게 노출하지 않아 계속 firing한다.
+  # 실제 장애가 아니며, 방치하면 폴러가 30초마다 이들을 분석해 LLM을 포화시킨다.
+  # (Watchdog과 warning/critical 이외 severity는 코드가 이미 제외한다.)
+  #
+  # 주의: TargetDown은 운영에서는 유효한 alert다. 여기서는 위와 같은 이유로 firing하므로
+  # 로컬 개발 오버레이에서만 무시한다.
+  ignoreAlerts:
+    - TargetDown
+    - etcdMembersDown
+    - etcdInsufficientMembers
+    - KubeSchedulerInstanceUnreachable
+    - KubeControllerManagerInstanceUnreachable
+
 # minikube-hostpath 프로비저너는 컨트롤플레인의 static pod라 그 노드에만
 # 올바른 권한(0777)의 PV 디렉토리를 만든다. 다중 노드(--nodes 2 이상)에서
 # postgres가 워커로 스케줄되면 PGDATA 생성이 Permission denied로 실패하므로
