@@ -145,3 +145,13 @@ export interface DiscoverResult {
   available: boolean;    // in-cluster API 접근 가능 여부
   error?: string;
 }
+
+// ── AI 재분석 (비동기 작업) ────────────────────────────────────────
+// 로컬 LLM은 분석에 수 분이 걸려 동기 응답이 프록시 타임아웃(nginx 기본 60초)에 걸린다.
+// POST로 작업을 시작하고 GET으로 진행 상태를 폴링한다.
+export interface ReanalyzeStatus {
+  state: "idle" | "running" | "done" | "failed";
+  elapsedSec: number;
+  error?: string;
+}
+

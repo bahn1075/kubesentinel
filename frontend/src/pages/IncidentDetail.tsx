@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Warning, BookOpen, ArrowLeft, ArrowSquareOut } from "@phosphor-icons/react";
-import { fetchIncident, reanalyzeIncident } from "../api/client";
+import { fetchIncident, startReanalyze, fetchReanalyzeStatus } from "../api/client";
 import { useAsync } from "../lib/useAsync";
 import { STATE_FLOW, severityClass, stateClass, riskClass, formatTime, isFailureState } from "../lib/format";
 import Skeleton from "../components/Skeleton";
@@ -38,18 +38,63 @@ export default function IncidentDetail() {
   const [inc, setInc] = useState(data);
   useEffect(() => setInc(data), [data]);
 
+  // AI 재분석은 비동기다. 시작 후 상태를 폴링하고, 완료되면 인시던트를 다시 읽어온다.
+  // (로컬 LLM은 수 분이 걸려 동기 응답이 프록시 타임아웃 60초에 걸린다.)
   const [reanalyzing, setReanalyzing] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const [reanalyzeErr, setReanalyzeErr] = useState<string | null>(null);
+
+  // 화면을 열었을 때 이미 재분석이 돌고 있으면(다른 탭에서 시작, 새로고침 등) 이어서 추적한다.
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    fetchReanalyzeStatus(id)
+      .then((st) => {
+        if (alive && st.state === "running") {
+          setReanalyzing(true);
+          setElapsed(st.elapsedSec);
+        }
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [id]);
+
+  // reanalyzing 동안 상태를 폴링한다. 언마운트/완료 시 정리한다.
+  useEffect(() => {
+    if (!reanalyzing || !id) return;
+    let alive = true;
+    const timer = setInterval(async () => {
+      try {
+        const st = await fetchReanalyzeStatus(id);
+        if (!alive) return;
+        setElapsed(st.elapsedSec);
+        if (st.state === "done") {
+          setReanalyzing(false);
+          setInc(await fetchIncident(id));   // 진단이 채워진 최신 상태로 교체
+        } else if (st.state === "failed") {
+          setReanalyzing(false);
+          setReanalyzeErr(st.error || "재분석에 실패했습니다.");
+        } else if (st.state === "idle") {
+          // 백엔드가 재시작되어 작업 기록이 사라진 경우
+          setReanalyzing(false);
+          setReanalyzeErr("재분석 상태를 잃었습니다(백엔드 재시작). 다시 시도하세요.");
+        }
+      } catch {
+        // 일시적 네트워크 오류는 다음 주기에 다시 시도한다.
+      }
+    }, 3000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [reanalyzing, id]);
 
   async function onReanalyze() {
     if (!inc) return;
-    setReanalyzing(true); setReanalyzeErr(null);
+    setReanalyzeErr(null); setElapsed(0);
     try {
-      setInc(await reanalyzeIncident(inc.incidentId));
+      const st = await startReanalyze(inc.incidentId);
+      setReanalyzing(st.state === "running");
+      setElapsed(st.elapsedSec);
     } catch (e) {
       setReanalyzeErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setReanalyzing(false);
     }
   }
 
@@ -157,8 +202,14 @@ export default function IncidentDetail() {
             <h3 style={{ margin: 0 }}>권장 조치 <span className="tag">룰 · Runbook 기반</span></h3>
             <div style={{ textAlign: "right" }}>
               <button onClick={onReanalyze} disabled={reanalyzing}>
-                {reanalyzing ? "재분석 중" : "AI 재분석 실행"}
+                {reanalyzing ? `분석 중… ${elapsed}초` : "AI 재분석 실행"}
               </button>
+              {reanalyzing && (
+                <div className="muted" style={{ fontSize: 12, marginTop: 4, maxWidth: 320 }}>
+                  로컬 모델은 수 분이 걸릴 수 있습니다. 이 화면을 떠나도 분석은 계속되며,
+                  완료되면 결과가 자동으로 표시됩니다.
+                </div>
+              )}
               {reanalyzeErr && <div className="muted" style={{ fontSize: 12, color: "var(--crit-text)", marginTop: 4, maxWidth: 320 }}>{reanalyzeErr}</div>}
             </div>
           </div>

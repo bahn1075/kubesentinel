@@ -41,11 +41,14 @@ func (s *WebhookServer) handleIncidentDetail(w http.ResponseWriter, r *http.Requ
 	// POST .../reanalyze: AI 진단이 없는(LLM 다운 등) 인시던트에 대해, 이미 수집된 근거로
 	// 진단을 다시 시도한다(근거 재수집 없음 — LLM 연결이 그때 끊겨 있었을 뿐 근거는 유효하다).
 	if id2, ok := strings.CutSuffix(id, "/reanalyze"); ok {
-		if r.Method != http.MethodPost {
+		switch r.Method {
+		case http.MethodPost:
+			s.handleIncidentReanalyze(w, r, id2) // 작업 시작 (202 즉시 반환)
+		case http.MethodGet:
+			s.handleIncidentReanalyzeStatus(w, r, id2) // 진행 상태 폴링
+		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
 		}
-		s.handleIncidentReanalyze(w, r, id2)
 		return
 	}
 
@@ -84,8 +87,19 @@ func (s *WebhookServer) handleIncidentDetail(w http.ResponseWriter, r *http.Requ
 	_, _ = w.Write(raw)
 }
 
-// handleIncidentReanalyze는 저장된 근거로 AI 진단을 다시 시도한다. POST /api/incidents/{id}/reanalyze
-// LLM이 다시 실패하면 인시던트는 건드리지 않고 에러만 반환한다(성공한 것처럼 보이면 안 됨).
+// reanalyzeStatusResponse는 재분석 작업의 진행 상태 응답입니다.
+type reanalyzeStatusResponse struct {
+	State      string `json:"state"` // idle | running | done | failed
+	ElapsedSec int    `json:"elapsedSec"`
+	Error      string `json:"error,omitempty"`
+}
+
+// handleIncidentReanalyze는 저장된 근거로 AI 진단을 다시 시도하는 작업을 시작한다.
+// POST /api/incidents/{id}/reanalyze → 202 Accepted (즉시 반환)
+//
+// 로컬 LLM은 분석에 수 분이 걸려 동기 응답이 프록시 타임아웃(nginx 기본 60초)에 걸린다.
+// 따라서 분석은 goroutine에서 수행하고, 진행 상태는 GET으로 폴링한다.
+// 완료되면 인시던트가 DB에 갱신되므로 GET /api/incidents/{id}로 결과를 받는다.
 func (s *WebhookServer) handleIncidentReanalyze(w http.ResponseWriter, r *http.Request, id string) {
 	raw, err := s.Store.GetIncident(id)
 	if err != nil {
@@ -102,19 +116,35 @@ func (s *WebhookServer) handleIncidentReanalyze(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	bundle := models.EvidenceBundleFromView(view)
-	result, err := s.Engine.Analyze(bundle)
-	if err != nil {
-		http.Error(w, "재분석 실패(AI 연결을 확인하세요): "+err.Error(), http.StatusBadGateway)
+	job, started := s.reanalyzeMgr().start(id)
+	if !started {
+		// 이미 실행 중 — 중복 실행하지 않고 현재 상태를 그대로 알려준다.
+		cur, _ := s.reanalyzeMgr().get(id)
+		writeJSON(w, http.StatusConflict, reanalyzeStatusResponse{
+			State: cur.State, ElapsedSec: cur.ElapsedSec(),
+			Error: "이미 재분석이 진행 중입니다.",
+		})
 		return
 	}
 
-	updated := models.NewIncidentView(bundle, result, "DiagnosisCompleted")
-	updated.CreatedAt = view.CreatedAt // 최초 발생 시각 보존 — 목록 정렬(created_at)이 바뀌지 않게
-	updated.PRURL = view.PRURL
-	if err := s.Store.SaveIncident(updated); err != nil {
-		http.Error(w, "failed to save incident: "+err.Error(), http.StatusInternalServerError)
+	go s.runReanalyze(id, view)
+
+	writeJSON(w, http.StatusAccepted, reanalyzeStatusResponse{
+		State: job.State, ElapsedSec: 0,
+	})
+}
+
+// handleIncidentReanalyzeStatus는 재분석 진행 상태를 반환한다.
+// GET /api/incidents/{id}/reanalyze
+//
+// 작업 기록이 없으면 idle이다(한 번도 실행하지 않았거나 프로세스가 재시작된 경우).
+func (s *WebhookServer) handleIncidentReanalyzeStatus(w http.ResponseWriter, r *http.Request, id string) {
+	j, ok := s.reanalyzeMgr().get(id)
+	if !ok {
+		writeJSON(w, http.StatusOK, reanalyzeStatusResponse{State: "idle"})
 		return
 	}
-	writeJSON(w, http.StatusOK, updated)
+	writeJSON(w, http.StatusOK, reanalyzeStatusResponse{
+		State: j.State, ElapsedSec: j.ElapsedSec(), Error: j.Error,
+	})
 }
