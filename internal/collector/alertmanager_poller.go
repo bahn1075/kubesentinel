@@ -16,8 +16,19 @@ import (
 func (s *WebhookServer) processBundle(b *models.EvidenceBundle) {
 	fmt.Printf("\n[KubeSentinel] 🔍 Analyzing Incident: %s\n", b.IncidentID)
 
+	if s.Store != nil {
+		if e := s.Store.SaveIncident(models.NewIncidentView(b, nil, "AnalysisRunning")); e != nil {
+			fmt.Printf("[KubeSentinel] ⚠️  Save Incident Failed: %v\n", e)
+		}
+	}
+
 	if s.Enricher != nil {
 		s.Enricher.Enrich(b)
+	}
+	if s.Store != nil {
+		if e := s.Store.SaveIncident(models.NewIncidentView(b, nil, "AnalysisRunning")); e != nil {
+			fmt.Printf("[KubeSentinel] ⚠️  Save Incident Failed: %v\n", e)
+		}
 	}
 
 	// 동시 실행 제한을 적용한다(로컬 LLM 포화 방지 — analysis_gate.go).

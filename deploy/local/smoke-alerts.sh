@@ -75,16 +75,17 @@ inject() {
   echo "  기대 분류: $want (심층 프로브: $probe)"
 
   local code
-  code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$URL/v1/alerts" \
+  code=$(curl -sS --connect-timeout 3 --max-time 20 -o /dev/null -w '%{http_code}' -X POST "$URL/v1/alerts" \
     -H 'Content-Type: application/json' \
     -d "{\"receiver\":\"kubesentinel\",\"status\":\"firing\",\"alerts\":[{\"status\":\"firing\",
          \"labels\":{\"alertname\":\"$alert\",\"namespace\":\"$ns\",\"deployment\":\"$workload\",
          \"pod\":\"$pod\",\"severity\":\"$sev\"},
-         \"annotations\":{\"summary\":\"$summary\"}}]}")
+         \"annotations\":{\"summary\":\"$summary\"}}]}") || code="curl_failed"
 
   echo "  → HTTP $code"
   if [ "$code" != "200" ]; then
     echo "  ⚠️  주입 실패. port-forward와 URL($URL)을 확인하세요." >&2
+    echo "     예: kubectl -n kubesentinel port-forward svc/kubesentinel-kubesentinel-ai 8080:8080" >&2
     return 1
   fi
   echo

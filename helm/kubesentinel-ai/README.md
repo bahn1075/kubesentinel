@@ -128,6 +128,20 @@ cd "$(git rev-parse --show-toplevel)"
 ./deploy/local/smoke-alerts.sh -l     # 목록만
 ```
 
+스크립트 기본 URL은 `http://localhost:8080`입니다. 백엔드 Service로 직접 보낼 때는
+별도 터미널에서 port-forward를 먼저 열어둡니다.
+
+```bash
+kubectl -n kubesentinel port-forward svc/kubesentinel-kubesentinel-ai 8080:8080
+```
+
+minikube LoadBalancer IP로 프론트엔드 nginx를 경유해도 됩니다. nginx가 `/api/*`와
+`/v1/*`를 백엔드로 프록시합니다.
+
+```bash
+URL=http://192.168.105.102 ./deploy/local/smoke-alerts.sh 2
+```
+
 > **한 번에 하나씩 주입하세요.** 여러 건을 연달아 넣으면 LLM 호출이 동시에 쌓여
 > 로컬 모델(LM Studio 등)이 처리하지 못합니다. 앞 건이 `✅ Analysis Complete`로
 > 끝난 것을 로그에서 확인한 뒤 다음 건을 넣으세요.
