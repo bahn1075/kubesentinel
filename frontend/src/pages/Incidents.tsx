@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { fetchIncidents, acknowledgeIncident, fetchIncidentCounts } from "../api/client";
 import type { IncidentFilter, IncidentCounts } from "../api/types";
 import { useAsync } from "../lib/useAsync";
@@ -64,30 +64,32 @@ export default function Incidents() {
         <b> 확인됨</b> 탭에서 다시 볼 수 있습니다.
       </p>
 
-      <div className="seg" role="tablist" aria-label="인시던트 목록 필터" style={{ marginBottom: 16 }}>
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.key}
-            className={tab === t.key ? "active" : ""}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-            {counts && <span className="seg-count">{counts[t.key]}</span>}
-          </button>
-        ))}
-      </div>
+      <div className="list-toolbar">
+        <div className="seg" role="tablist" aria-label="인시던트 목록 필터">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.key}
+              className={tab === t.key ? "active" : ""}
+              onClick={() => setTab(t.key)}
+            >
+              {t.label}
+              {counts && <span className="seg-count">{counts[t.key]}</span>}
+            </button>
+          ))}
+        </div>
 
-      <input
-        type="text"
-        placeholder="검색: alert / namespace / workload / state"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        style={{ maxWidth: 380, marginBottom: 16 }}
-        aria-label="인시던트 검색"
-      />
+        <input
+          type="text"
+          placeholder="검색: alert / namespace / workload / state"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          className="list-search"
+          aria-label="인시던트 검색"
+        />
+      </div>
 
       {filtered.length === 0 ? (
         <div className="empty">
@@ -107,7 +109,7 @@ export default function Incidents() {
               {filtered.map((i) => (
                 <tr key={i.incidentId} className="rowlink" onClick={() => nav(`/incidents/${i.incidentId}`)}>
                   <td className="muted mono">{formatTime(i.createdAt)}</td>
-                  <td><code>{i.incidentId}</code></td>
+                  <td><Link className="incident-link" to={`/incidents/${i.incidentId}`} onClick={(e) => e.stopPropagation()}><code>{i.incidentId}</code></Link></td>
                   <td className="mono">{i.namespace}/{i.workload}</td>
                   <td><span className={`badge ${severityClass(i.severity)}`}>{i.severity}</span></td>
                   <td className="muted mono">{i.diagnosis ? `${Math.round(i.diagnosis.confidence * 100)}%` : "-"}</td>

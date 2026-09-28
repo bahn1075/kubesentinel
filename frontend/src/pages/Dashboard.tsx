@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Siren, HourglassMedium, GitPullRequest, CheckCircle } from "@phosphor-icons/react";
 import { fetchIncidents } from "../api/client";
 import { useAsync } from "../lib/useAsync";
@@ -25,8 +25,14 @@ export default function Dashboard() {
 
   return (
     <>
-      <h1 className="page-title">Dashboard</h1>
-      <p className="page-sub">클러스터 장애 감지·진단·조치 현황 요약</p>
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">CLUSTER OVERVIEW</p>
+          <h1 className="page-title">Dashboard</h1>
+          <p className="page-sub">클러스터 장애 감지·진단·조치 현황</p>
+        </div>
+        <Link className="text-link" to="/incidents">인시던트 보기 <span aria-hidden>↗</span></Link>
+      </div>
 
       <div className="cards">
         {tiles.map((t) => (
@@ -39,23 +45,26 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <h3 style={{ margin: "0 0 12px", fontSize: 15 }}>최근 인시던트</h3>
+      <div className="section-heading">
+        <h2>최근 인시던트 <span className="count">{incidents.length}</span></h2>
+        <span className="muted">감지된 신호와 처리 상태</span>
+      </div>
       {incidents.length === 0 ? (
         <div className="empty">아직 감지된 인시던트가 없습니다.</div>
       ) : (
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>시각</th><th>Alert</th><th>대상</th><th>심각도</th><th>상태</th></tr>
+              <tr><th>Alert</th><th>대상</th><th>심각도</th><th>상태</th><th>감지 시각</th></tr>
             </thead>
             <tbody>
               {incidents.map((i) => (
                 <tr key={i.incidentId} className="rowlink" onClick={() => nav(`/incidents/${i.incidentId}`)}>
-                  <td className="muted mono">{formatTime(i.createdAt)}</td>
-                  <td><code>{i.alert}</code></td>
-                  <td className="mono">{i.namespace}/{i.workload}</td>
+                  <td><Link className="incident-link" to={`/incidents/${i.incidentId}`} onClick={(e) => e.stopPropagation()}><code>{i.alert}</code></Link></td>
+                  <td><span className="resource-name mono">{i.workload}</span><span className="resource-namespace">{i.namespace}</span></td>
                   <td><span className={`badge ${severityClass(i.severity)}`}>{i.severity}</span></td>
                   <td><span className={`badge ${stateClass(i.state)}`}>{i.state}</span></td>
+                  <td className="muted mono timestamp">{formatTime(i.createdAt)}</td>
                 </tr>
               ))}
             </tbody>

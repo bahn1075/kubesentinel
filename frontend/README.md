@@ -13,6 +13,20 @@ npm run dev        # http://localhost:5173 (/api 는 localhost:8080 백엔드로
 npm run build      # tsc + vite build → dist/
 ```
 
+## 화면 검증
+
+개발 서버를 켠 뒤 별도 터미널에서 실행합니다. API 응답을 브라우저 안에서 대체하므로 운영 데이터는 변경하지 않습니다.
+7개 화면의 다크·라이트 테마와 1440/768/390px 레이아웃, 상세 이동, 검색, 확인 처리, 무시 규칙, 설정 저장을 확인합니다.
+
+```bash
+npm install --prefix /tmp/kubesentinel-browser playwright
+/tmp/kubesentinel-browser/node_modules/.bin/playwright install chromium
+PLAYWRIGHT_MODULE=/tmp/kubesentinel-browser/node_modules/playwright/index.mjs node scripts/check-ui.mjs
+```
+
+`UI_BASE_URL`로 서버 주소를 지정할 수 있습니다(기본 `http://127.0.0.1:5173`).
+`--interactions-only`는 레이아웃 검사를 생략하고 조작만 확인합니다.
+
 ## 환경 변수 (빌드 타임)
 
 | 변수 | 기본값 | 설명 |

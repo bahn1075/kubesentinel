@@ -5,7 +5,7 @@
 #     -t <registry>/kubesentinel-ai-frontend:<tag> --push frontend/
 
 # --- build stage ---
-FROM node:22-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
 WORKDIR /app
 
 # 의존성 레이어 캐시 (lockfile 기반 재현 가능 설치)
