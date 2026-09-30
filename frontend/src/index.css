@@ -259,6 +259,10 @@ td.mono, td .mono, td code { font-variant-numeric: tabular-nums; }
 .kv > * { min-width: 0; overflow-wrap: anywhere; }
 .kv .k { color: var(--text-dim); }
 
+.narrative { max-width: 80ch; overflow-wrap: anywhere; text-wrap: pretty; }
+.narrative p { margin: 0; white-space: pre-line; }
+.narrative p + p { margin-top: 0.8em; }
+
 .actions-list { list-style: none; padding: 0; margin: 0; }
 .actions-list li {
   border: 1px solid var(--border);

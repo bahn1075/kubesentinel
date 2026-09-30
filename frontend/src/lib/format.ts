@@ -43,3 +43,7 @@ export function formatTime(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
+
+export function splitNarrative(text: string): string[] {
+  return text.trim().split(/(?<=[.!?。])\s+(?=\S)|\n\s*\n/u).map((part) => part.trim()).filter(Boolean);
+}

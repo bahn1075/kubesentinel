@@ -3,8 +3,12 @@ import { useParams, Link } from "react-router-dom";
 import { Warning, BookOpen, ArrowLeft, ArrowSquareOut } from "@phosphor-icons/react";
 import { fetchIncident, startReanalyze, fetchReanalyzeStatus } from "../api/client";
 import { useAsync } from "../lib/useAsync";
-import { STATE_FLOW, severityClass, stateClass, riskClass, formatTime, isFailureState } from "../lib/format";
+import { STATE_FLOW, severityClass, stateClass, riskClass, formatTime, isFailureState, splitNarrative } from "../lib/format";
 import Skeleton from "../components/Skeleton";
+
+function NarrativeText({ text }: { text: string }) {
+  return <div className="narrative">{splitNarrative(text).map((part, i) => <p key={i}>{part}</p>)}</div>;
+}
 
 // 근거 품질 뱃지 (백엔드가 코드로 계산한 값)
 function evidenceBadge(q?: string) {
@@ -150,8 +154,8 @@ export default function IncidentDetail() {
         <div className="section">
           <h3>AI 진단 (RCA)</h3>
           <div className="kv" style={{ marginBottom: 12 }}>
-            <span className="k">Root Cause</span><span>{inc.diagnosis.rootCause}</span>
-            <span className="k">Summary</span><span>{inc.diagnosis.summary}</span>
+            <span className="k">Root Cause</span><NarrativeText text={inc.diagnosis.rootCause} />
+            <span className="k">Summary</span><NarrativeText text={inc.diagnosis.summary} />
             <span className="k">Confidence</span>
             <span style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span className="confidence-bar"><div style={{ width: `${inc.diagnosis.confidence * 100}%` }} /></span>
@@ -172,7 +176,7 @@ export default function IncidentDetail() {
               <li key={idx}>
                 <span className="badge dim">{a.type}</span>{" "}
                 <span className={`badge ${riskClass(a.risk)}`}>risk: {a.risk}</span>
-                <div style={{ marginTop: 6 }}>{a.description}</div>
+                <div style={{ marginTop: 6 }}><NarrativeText text={a.description} /></div>
                 {a.target && <div className="mono muted" style={{ marginTop: 4 }}>대상: {a.target}</div>}
               </li>
             ))}
