@@ -7,7 +7,7 @@ import Skeleton from "../components/Skeleton";
 
 export default function Dashboard() {
   const nav = useNavigate();
-  const { data: incidents, loading } = useAsync(fetchIncidents);
+  const { data: incidents, loading } = useAsync(fetchIncidents, [], 5000);
 
   if (loading || !incidents) return <Skeleton title rows={6} />;
 

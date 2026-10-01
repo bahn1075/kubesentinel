@@ -15,7 +15,7 @@ const TABS: { key: IncidentFilter; label: string }[] = [
 export default function Incidents() {
   const nav = useNavigate();
   const [tab, setTab] = useState<IncidentFilter>("open");
-  const { data: incidents, loading } = useAsync(() => fetchIncidents(tab), [tab]);
+  const { data: incidents, loading } = useAsync(() => fetchIncidents(tab), [tab], 5000);
   const [q, setQ] = useState("");
   const [acked, setAcked] = useState<Set<string>>(new Set());
   const [counts, setCounts] = useState<IncidentCounts | null>(null);
@@ -24,7 +24,11 @@ export default function Incidents() {
   const loadCounts = useCallback(() => {
     fetchIncidentCounts().then(setCounts).catch(() => setCounts(null));
   }, []);
-  useEffect(loadCounts, [loadCounts]);
+  useEffect(() => {
+    loadCounts();
+    const timer = setInterval(loadCounts, 5000);
+    return () => clearInterval(timer);
+  }, [loadCounts]);
 
   // 탭을 옮기면 낙관적으로 숨겨둔 목록을 비운다(해당 탭에서는 다시 보여야 한다).
   useEffect(() => setAcked(new Set()), [tab]);

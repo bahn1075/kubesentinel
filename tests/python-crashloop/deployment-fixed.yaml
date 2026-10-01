@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: python-syntax-crash
+  namespace: kubesentinel-crashloop-test
+  labels:
+    app.kubernetes.io/part-of: kubesentinel-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: python-syntax-crash
+  template:
+    metadata:
+      labels:
+        app: python-syntax-crash
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: python
+          image: python:3.12-slim
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -u
+            - -c
+            - |
+              from threading import Event
+
+              def calculate_total(price):
+                  return price * 0.9
+
+              print(calculate_total(100))
+              Event().wait()
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi

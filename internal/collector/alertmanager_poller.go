@@ -12,13 +12,26 @@ import (
 )
 
 // processBundle은 한 incident에 대한 공용 처리 경로입니다 (webhook·poller 공용):
-// 근거 보강 → AI 분석 → 영속화 → 알림.
+// 감지 기록 → 근거 보강·기록 → AI 분석·기록 → 알림.
 func (s *WebhookServer) processBundle(b *models.EvidenceBundle) {
 	fmt.Printf("\n[KubeSentinel] 🔍 Analyzing Incident: %s\n", b.IncidentID)
 
+	createdAt := time.Now().UTC()
+	save := func(result *models.DiagnosisResult, state string) {
+		if s.Store == nil {
+			return
+		}
+		v := models.NewIncidentView(b, result, state)
+		v.CreatedAt = createdAt
+		if err := s.Store.SaveIncident(v); err != nil {
+			fmt.Printf("[KubeSentinel] ⚠️  Save Incident Failed: %v\n", err)
+		}
+	}
+	save(nil, "IncidentDetected")
 	if s.Enricher != nil {
 		s.Enricher.Enrich(b)
 	}
+	save(nil, "EvidenceCollected")
 
 	// 동시 실행 제한을 적용한다(로컬 LLM 포화 방지 — analysis_gate.go).
 	result, err := s.analyzeGated(b)
@@ -30,12 +43,7 @@ func (s *WebhookServer) processBundle(b *models.EvidenceBundle) {
 	} else {
 		fmt.Printf("[KubeSentinel] ✅ Analysis Complete! Root Cause: %s\n", result.RootCause)
 	}
-
-	if s.Store != nil {
-		if e := s.Store.SaveIncident(models.NewIncidentView(b, result, state)); e != nil {
-			fmt.Printf("[KubeSentinel] ⚠️  Save Incident Failed: %v\n", e)
-		}
-	}
+	save(result, state)
 
 	if result != nil && s.Notifier != nil {
 		if err := s.Notifier.NotifyDiagnosis(b, result); err != nil {

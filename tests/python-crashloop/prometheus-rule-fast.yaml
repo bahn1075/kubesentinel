@@ -1,0 +1,20 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kubesentinel-python-crashloop-test
+  namespace: monitoring
+  labels:
+    release: monitoring-stack
+    app.kubernetes.io/part-of: kubesentinel-test
+spec:
+  groups:
+    - name: kubesentinel-python-crashloop-test
+      rules:
+        - alert: KubePodCrashLooping
+          expr: kube_pod_container_status_restarts_total{namespace="kubesentinel-crashloop-test",container="python"} >= 3
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: Python syntax crash in test pod
+            description: Test pod repeatedly exits; inspect Python traceback in Loki.

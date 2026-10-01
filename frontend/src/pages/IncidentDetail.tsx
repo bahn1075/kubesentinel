@@ -38,7 +38,7 @@ function ProbeBlock({ findings }: { findings: string[] }) {
 
 export default function IncidentDetail() {
   const { id = "" } = useParams();
-  const { data, loading } = useAsync(() => fetchIncident(id), [id]);
+  const { data, loading } = useAsync(() => fetchIncident(id), [id], 5000);
   const [inc, setInc] = useState(data);
   useEffect(() => setInc(data), [data]);
 
@@ -110,6 +110,7 @@ export default function IncidentDetail() {
   );
 
   const currentIdx = STATE_FLOW.indexOf(inc.state);
+  const analysisPending = inc.state === "IncidentDetected" || inc.state === "EvidenceCollected";
 
   // 구버전(string) / 신버전(object) runbook 형태를 모두 정규화
   const runbooks = (inc.evidence?.runbooks ?? []).map((r) =>
@@ -205,8 +206,8 @@ export default function IncidentDetail() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
             <h3 style={{ margin: 0 }}>권장 조치 <span className="tag">룰 · Runbook 기반</span></h3>
             <div style={{ textAlign: "right" }}>
-              <button onClick={onReanalyze} disabled={reanalyzing}>
-                {reanalyzing ? `분석 중… ${elapsed}초` : "AI 재분석 실행"}
+              <button onClick={onReanalyze} disabled={reanalyzing || analysisPending}>
+                {analysisPending ? "AI 분석 중…" : reanalyzing ? `분석 중… ${elapsed}초` : "AI 재분석 실행"}
               </button>
               {reanalyzing && (
                 <div className="muted" style={{ fontSize: 12, marginTop: 4, maxWidth: 320 }}>
@@ -219,7 +220,11 @@ export default function IncidentDetail() {
           </div>
           <p className="muted" style={{ fontSize: 12.5, marginTop: 10, marginBottom: 12, display: "flex", gap: 6 }}>
             <Warning size={15} color="var(--warn)" aria-hidden style={{ flex: "none", marginTop: 2 }} />
-            <span>AI 진단(LLM)이 생성되지 않아 자동 RCA가 없습니다. 아래는 결정적 <b>룰 분류</b>와 매칭된 <b>Runbook</b>에 기반한 권장 조치입니다. LLM 연결을 확인한 뒤 위 <b>AI 재분석 실행</b> 버튼으로 다시 시도할 수 있습니다.</span>
+            {analysisPending ? (
+              <span>장애가 감지되어 근거 수집 또는 AI 분석을 진행 중입니다. 다른 분석이 실행 중이면 대기열에서 기다립니다. 완료되면 진단 결과가 자동으로 표시됩니다.</span>
+            ) : (
+              <span>AI 진단(LLM)이 생성되지 않아 자동 RCA가 없습니다. 아래는 결정적 <b>룰 분류</b>와 매칭된 <b>Runbook</b>에 기반한 권장 조치입니다. LLM 연결을 확인한 뒤 위 <b>AI 재분석 실행</b> 버튼으로 다시 시도할 수 있습니다.</span>
+            )}
           </p>
           {inc.rule && inc.rule.category !== "Unknown" && (
             <p style={{ marginTop: 0 }}>
@@ -244,7 +249,7 @@ export default function IncidentDetail() {
               </div>
             ))
           ) : (
-            <p className="muted">매칭된 Runbook 본문이 없습니다. 위 근거(Events/Metrics)를 검토해 수동 조치하거나, 위 <b>AI 재분석 실행</b> 버튼으로 AI 진단을 다시 시도하세요.</p>
+            <p className="muted">{analysisPending ? "수집된 근거는 아래에서 확인할 수 있습니다." : <>매칭된 Runbook 본문이 없습니다. 위 근거(Events/Metrics)를 검토해 수동 조치하거나, 위 <b>AI 재분석 실행</b> 버튼으로 AI 진단을 다시 시도하세요.</>}</p>
           )}
         </div>
       )}
