@@ -6,8 +6,8 @@
 # 신규 배포 시: 이미지 빌드·push 후 아래 tag를 새 태그로 갱신 → commit → ArgoCD 자동 동기화.
 image:
   repository: docker.io/bahn1075/kubesentinel-ai
-  tag: "202609111428"
-  pullPolicy: IfNotPresent
+  tag: latest
+  pullPolicy: Always
 
 # Settings의 "Pod 재시작" 버튼(AI 설정 반영용)이 동작하려면 이 Deployment 1개로 scope된
 # patch 권한이 필요하다(helm/kubesentinel-ai/templates/rbac-restart.yaml). 기본은 off.
@@ -22,8 +22,8 @@ collector:
 frontend:
   image:
     repository: docker.io/bahn1075/kubesentinel-ai-front
-    tag: "202609281543"
-    pullPolicy: IfNotPresent
+    tag: latest
+    pullPolicy: Always
 
 ai:
   endpoint: "http://lm-studio-mac:1234/v1"
